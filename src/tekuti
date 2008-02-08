@@ -29,4 +29,59 @@ exec guile $GUILE_FLAGS -s $0 "$@"
 ;;; Code:
 
 
-(top-repl)
+(use-modules (ice-9 rdelim))
+(debug-enable 'backtrace)
+
+(define *host* "127.0.0.1")
+(define *port* 8081)
+(define *backlog* 5)
+
+(define *socket* (socket PF_INET SOCK_STREAM 0))
+(bind *socket* AF_INET (inet-aton *host*) *port*)
+(listen *socket* *backlog*)
+
+(define (dbg fmt . args)
+  (apply format (current-error-port) fmt args))
+
+(define (strip-headers socket)
+  (define (read-line*)
+    (let ((line (read-line socket)))
+      (if (eof-object? line)
+          (error "unexpected eof")
+          line)))
+  (let lp ((keys '()) (values '()))
+    (let ((k (read-line*)))
+      (if (string=? k "end")
+          (reverse (map cons keys values))
+          (lp (cons k keys) (cons (read-line*) values))))))
+
+(define (output-headers headers)
+  (for-each
+   (lambda (k v)
+     (format #t "~a\n~a\n" k v))
+   (map car headers) (map cdr headers))
+  (display "end\n"))
+
+(define (handle-request headers post-data)
+  (output-headers '(("Status" . "200 OK")
+                    ("Content-Type" . "text/html")))
+  (display "<html><head><title>hello</title><body><p>hello world</p></body>"))
+
+(define (connection-received socket sockaddr)
+  (let ((headers (strip-headers socket))
+        (post-data "")) ;; blocks: (read-delimited "" socket)))
+    (dbg "~a" headers)
+    (with-output-to-port socket
+      (lambda ()
+        (handle-request headers post-data)))
+    (close-port socket)))
+
+(define (event-loop)
+  (pk 'listening)
+  (let ((pair (accept *socket*)))
+    (pk pair)
+    (connection-received (car pair) (cdr pair))
+    (pk 'done)
+    (event-loop)))
+    
+(event-loop)
