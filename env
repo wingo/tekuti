@@ -1,0 +1,8 @@
+#!/bin/sh
+
+this_dir=$(cd $(dirname $0) && pwd)
+GUILE_LOAD_PATH=$this_dir/$pkg:$GUILE_LOAD_PATH
+
+export GUILE_LOAD_PATH
+
+exec "$@"

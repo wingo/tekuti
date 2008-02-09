@@ -1,6 +1,6 @@
 #! /bin/bash
 # -*- scheme -*-
-exec guile $GUILE_FLAGS -s $0 "$@"
+exec guile $GUILE_FLAGS -l $0 -e main "$@"
 !#
 ;; Tekuti
 ;; Copyright (C) 2008 Andy Wingo <wingo at pobox dot com>
@@ -29,19 +29,79 @@ exec guile $GUILE_FLAGS -s $0 "$@"
 ;;; Code:
 
 
-(use-modules (ice-9 rdelim))
+(use-modules (ice-9 rdelim)
+             (ice-9 popen)
+             (srfi srfi-1)
+             (sxml simple)
+             (tekuti url)
+             (match-bind)
+             (sxml transform))
 (debug-enable 'backtrace)
+
+(define (expanduser path)
+  (let ((parts (string-split path #\/)))
+    (if (eqv? (string-ref (car parts) 0) #\~)
+        (let ((user (if (= (string-length (car parts)) 1)
+                        (cuserid)
+                        (substring (car parts) 1))))
+          (string-join (cons (passwd:dir (getpwnam user)) (cdr parts)) "/"))
+        path)))
 
 (define *host* "127.0.0.1")
 (define *port* 8081)
 (define *backlog* 5)
-
-(define *socket* (socket PF_INET SOCK_STREAM 0))
-(bind *socket* AF_INET (inet-aton *host*) *port*)
-(listen *socket* *backlog*)
+(define *git-dir* (expanduser "~/blog.git"))
+(define *git* "git")
+(define *public-url-base* "/")
+(define *private-url-base* "/blog/")
+(define *debug* #t)
 
 (define (dbg fmt . args)
   (apply format (current-error-port) fmt args))
+
+(define-macro (unwind-protect form . cleanups)
+  `(dynamic-wind (lambda () #t)
+       (lambda () ,form)
+       (lambda () ,@cleanups)))
+
+(define-macro (with-pipe var make-pipe . body)
+  `(let ((,var ,make-pipe))
+     (unwind-protect
+      (begin ,@body)
+      (let ((ret (close-pipe ,var)))
+        (if (not (eq? (status:exit-val ret) 0))
+            (throw 'system-error ,var ret))))))
+
+(define (git . args)
+  (with-pipe
+   pipe (apply open-pipe* OPEN_READ *git* "--bare" args)
+   (read-delimited "" pipe)))
+
+;; true badness
+(define (git/input input . args)
+  (let* ((template "/tmp/tekutiXXXXXX")
+         (tmp (mkstemp! template)))
+    (display input tmp)
+    (close tmp)
+    (unwind-protect
+     (with-pipe
+      pipe (open-pipe* OPEN_BOTH "/bin/sh" "-c"
+                       (string-join `(,*git* "--bare" ,@args "<" ,template) " "))
+      (read-delimited "" pipe))
+     (delete-file template))))
+
+(define (is-dir? path)
+  (catch 'system-error
+         (lambda () (eq? (stat:type (stat path)) 'directory))
+         (lambda args #f)))
+
+(define (ensure-git-repo)
+  (if (not (is-dir? *git-dir*))
+      (begin
+        (mkdir *git-dir*)
+        (chdir *git-dir*)
+        (git "init"))
+      (chdir *git-dir*)))
 
 (define (strip-headers socket)
   (define (read-line*)
@@ -55,33 +115,232 @@ exec guile $GUILE_FLAGS -s $0 "$@"
           (reverse (map cons keys values))
           (lp (cons k keys) (cons (read-line*) values))))))
 
-(define (output-headers headers)
+(define (output-headers headers port)
   (for-each
    (lambda (k v)
-     (format #t "~a\n~a\n" k v))
+     (format port "~a\n~a\n" k v))
    (map car headers) (map cdr headers))
-  (display "end\n"))
+  (display "end\n" port))
+
+(define-macro (let-headers headers bindings . body)
+  (let ((headers-var (gensym)))
+    `(let ((,headers-var ,headers))
+       (let (,@(map (lambda (binding)
+                      `(,(car binding)
+                        (or (assoc-ref ,headers-var ,(cadr binding))
+                            (error "Missing header:" ,(cadr binding)))))
+                    bindings))
+         ,@body))))
+
+(define (page-debug headers)
+  `(html (head (title "hello"))
+         (body (p "hello world!")
+               (table
+                (tr (th "header") (th "value"))
+                ,@(map (lambda (pair)
+                         `(tr (td ,(car pair)) (td ,(cdr pair))))
+                       headers)))))
+
+(define (visible-error . html-body)
+  (throw 'visible-error 404 html-body))
+
+(define (page-not-found path)
+  (throw 'html-error 404 path))
+
+(define (url-path-split path)
+  (filter (lambda (x) (not (string-null? x)))
+          (map url:decode (string-split path #\/))))
+
+(define-macro (url-path-case method path . clauses)
+  (define (optional-argument arg)
+    (let ((len (string-length arg)))
+      (and (eqv? (string-ref arg (1- len)) #\?)
+           (substring arg 0 (1- len)))))
+  (let ((method-sym (gensym)) (path-parts (gensym)))
+    (define (process-clauses)
+      (map (lambda (clause)
+             (let ((pattern (car clause)) (body (cdr clause)))
+               (cond
+                ((eq? pattern 'else)
+                 clause)
+                (else
+                 (let* ((method-match (car pattern))
+                        (parts-match (map symbol->string (cdr pattern)))
+                        (nargs (length parts-match))
+                        (opt (or (find-tail optional-argument parts-match) '()))
+                        (nopt (length opt))
+                        (nreq (- nargs nopt)))
+                   (cond
+                    ((null? opt)
+                     `((and (eq? ,method-sym ',method-match)
+                            (equal? ,path-parts ',parts-match))
+                       ,@body))
+                    (else
+                     `((and (eq? ,method-sym ',method-match)
+                            (equal? (list-head ,path-parts ,nreq)
+                                    ',(list-head parts-match nreq))
+                            (< (length ,path-parts) ,nargs))
+                       (apply
+                        (lambda ,(map string->symbol (map optional-argument opt))
+                          ,@body)
+                        (let ((tail (list-tail ,path-parts ,nreq)))
+                          (append tail (make-list (- ,nopt (length tail)) #f))))))))))))
+           clauses))
+    `(let ((,method-sym (string->symbol ,method))
+           (,path-parts (url-path-split ,path)))
+       (cond ,@(process-clauses)))))
+
+(define-macro (url-relative-path-case method path . clauses)
+  (let ((infix (map string->symbol (url-path-split *private-url-base*))))
+    (define (munge-clause clause)
+      (cond
+       ((eq? (car clause) 'else) clause)
+       (else
+        (let ((method (caar clause))
+              (parts (cdar clause))
+              (body (cdr clause)))
+          `((,method ,@infix ,@parts) ,@body)))))
+    `(url-path-case ,method ,path
+                    ,@(map munge-clause clauses))))
+
+(define (unimplemented . args)
+  (apply throw 'unimplemented args))
+
+(use-modules (scheme session))
+(use-modules (match-bind))
+
+;;(putenv "GIT_DIR=/home/wingo/blog.git")
+(define-macro (match-lines string pattern bindings expr)
+  (let ((line (gensym)) (seed (gensym)))
+    `(fold
+      (lambda (,line ,seed)
+        (match-bind ,pattern ,line ,bindings
+                    (cons ,expr ,seed)
+                    ,seed))
+      '() (string-split ,string #\newline))))
+
+(define (git-ls-tree treeish path)
+  (match-lines (git "ls-tree" treeish (or path "."))
+               "^(.+) (.+) (.+)\t(.+)$" (_ mode type object name)
+               (list mode type object name)))
+
+(define (git-ls-subdirs treeish path)
+  (match-lines (git "ls-tree" treeish (or path "."))
+               "^(.+) tree (.+)\t(.+)$" (_ mode object name)
+               (cons name object)))
+
+(define (dsu-sort list key less)
+  (map cdr
+       (stable-sort (map (lambda (x) (cons (key x) x)) list)
+                    (lambda (x y) (less (car x) (car y))))))
+
+(define (all-published-posts)
+  (dsu-sort
+   (filter post-timestamp (map cdr (git-ls-subdirs "master" #f)))
+   post-timestamp
+   <))
+
+(define (comment-metadata sha1)
+  (match-lines (git "cat-file" "blob" (string-append sha1 ":" "metadata"))
+               "^([^: ]+): +(.*)$" (_ k v)
+               (cons (string->symbol k) v)))
+
+(define (comment-timestamp sha1)
+  (and=> (assq-ref (comment-metadata sha1) 'timestamp)
+         string->number))
+
+(define (post-comments sha1)
+  (dsu-sort
+   (map cdr (git-ls-subdirs sha1 "comments/"))
+   comment-timestamp
+   <))
+
+(define (build-comment-skeleton comments)
+  (fold (lambda (sha1 parent)
+          (string-trim-both
+           (if parent
+               (git/input "comment" "commit-tree" sha1)
+               (git/input "comment" "commit-tree" "-p" parent sha1))))
+        #f
+        comments))
+
+(post-comments "085138c227a15c1462138958868f8ef45741e5c5")
+(git/input "comment" "commit-tree" "fae8f17277f74fe1e0710fd3be6ebb7879b65969")
+(all-published-posts)
+(string-trim-both "aadabe54f0a4d141657f208645955a2c85af4e0b
+")
+
+
+(post-metadata "9a83feef2c2304797ad295043d1f33d8e2dae52d")
+
+(define (reindex-posts)
+
+(define (reindex)
+  (reindex-posts)
+  (reindex-categories))
 
 (define (handle-request headers post-data)
-  (output-headers '(("Status" . "200 OK")
-                    ("Content-Type" . "text/html")))
-  (display "<html><head><title>hello</title><body><p>hello world</p></body>"))
+  (let-headers
+   headers ((method "method") (path "url"))
+   (url-relative-path-case
+    method path
+    ((POST admin new-post)
+     (unimplemented 'new-post))
+    ((POST admin modify-post)
+     (unimplemented 'modify-post))
+    ((POST admin new-comment)
+     (unimplemented 'new-comment))
+    ((POST admin delete-comment)
+     (unimplemented 'delete-comment))
+    ((POST admin delete-post)
+     (unimplemented 'delete-post))
+    ((GET)
+     (unimplemented 'index))
+    ((GET archives year? month? day? post?)
+     (unimplemented 'archives))
+    ((GET debug)
+     (page-debug headers))
+    ((POST search)
+     (unimplemented 'search))
+    (else (page-not-found path)))))
+     
+(define xhtml-doctype
+  (string-append
+   "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\" "
+   "\"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\">\n"))
 
 (define (connection-received socket sockaddr)
   (let ((headers (strip-headers socket))
         (post-data "")) ;; blocks: (read-delimited "" socket)))
     (dbg "~a" headers)
-    (with-output-to-port socket
-      (lambda ()
-        (handle-request headers post-data)))
+    (catch #t
+           (lambda ()
+             (let ((sxml (handle-request headers post-data)))
+               (output-headers '(("Status" . "200 OK")
+                                 ("Content-Type" . "text/html"))
+                               socket)
+               (display xhtml-doctype socket)
+               (sxml->xml sxml socket)))
+           (lambda args
+             (output-headers '(("Status" . "500 Internal Server Error")
+                               ("Content-Type" . "text/plain"))
+                             socket)
+             (write args socket)))
+             
     (close-port socket)))
 
-(define (event-loop)
+(define (event-loop socket)
   (pk 'listening)
-  (let ((pair (accept *socket*)))
+  (bind socket AF_INET (inet-aton *host*) *port*)
+  (listen socket *backlog*)
+  (let lp ((pair (accept socket)))
     (pk pair)
     (connection-received (car pair) (cdr pair))
     (pk 'done)
-    (event-loop)))
+    (lp (accept socket))))
     
-(event-loop)
+(define (main)
+  (ensure-git-repo)
+  (event-loop (socket PF_INET SOCK_STREAM 0)))
+
+(main)
