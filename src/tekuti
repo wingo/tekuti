@@ -28,6 +28,8 @@ exec guile $GUILE_FLAGS -l $0 -e main "$@"
 ;;
 ;;; Code:
 
+;;hack!
+(use-modules (ice-9 regex))
 
 (use-modules (ice-9 rdelim)
              (ice-9 popen)
@@ -70,7 +72,7 @@ exec guile $GUILE_FLAGS -l $0 -e main "$@"
       (begin ,@body)
       (let ((ret (close-pipe ,var)))
         (if (not (eq? (status:exit-val ret) 0))
-            (throw 'system-error ,var ret))))))
+            (throw 'pipe-error ,var ret))))))
 
 (define (git . args)
   (with-pipe
@@ -78,17 +80,19 @@ exec guile $GUILE_FLAGS -l $0 -e main "$@"
    (read-delimited "" pipe)))
 
 ;; true badness
-(define (git/input input . args)
-  (let* ((template "/tmp/tekutiXXXXXX")
+(define (git/input+env input env . args)
+  (let* ((template (string-copy "/tmp/tekutiXXXXXX"))
          (tmp (mkstemp! template)))
     (display input tmp)
     (close tmp)
-    (unwind-protect
-     (with-pipe
-      pipe (open-pipe* OPEN_BOTH "/bin/sh" "-c"
-                       (string-join `(,*git* "--bare" ,@args "<" ,template) " "))
-      (read-delimited "" pipe))
-     (delete-file template))))
+    (let ((cmd (string-join `("env" ,@env ,*git* "--bare" ,@args "<" ,template) " ")))
+      (display cmd)(newline)
+      (unwind-protect
+       (with-pipe
+        pipe (open-pipe* OPEN_BOTH "/bin/sh" "-c"
+                         (string-join `("env" ,@env ,*git* "--bare" ,@args "<" ,template) " "))
+        (read-delimited "" pipe))
+       (delete-file template)))))
 
 (define (is-dir? path)
   (catch 'system-error
@@ -234,12 +238,28 @@ exec guile $GUILE_FLAGS -l $0 -e main "$@"
        (stable-sort (map (lambda (x) (cons (key x) x)) list)
                     (lambda (x y) (less (car x) (car y))))))
 
-(define (all-published-posts)
+(define (all-published-posts master)
+  (define (timestamp x)
+    (post-timestamp (cdr x)))
   (dsu-sort
-   (filter post-timestamp (map cdr (git-ls-subdirs "master" #f)))
-   post-timestamp
+   (filter timestamp (git-ls-subdirs master #f))
+   timestamp
    <))
 
+(define (post-metadata sha1)
+  (match-lines (git "cat-file" "blob" (string-append sha1 ":" "metadata"))
+               "^([^: ]+): +(.*)$" (_ k v)
+               (cons (string->symbol k) v)))
+
+(define (post-timestamp sha1)
+  (and=> (assq-ref (post-metadata sha1) 'timestamp)
+         string->number))
+
+(define (post-categories sha1)
+  (or (and=> (assq-ref (post-metadata sha1) 'categories)
+             (lambda (x) (map string-trim-both (string-split x #\,))))
+      '()))
+             
 (define (comment-metadata sha1)
   (match-lines (git "cat-file" "blob" (string-append sha1 ":" "metadata"))
                "^([^: ]+): +(.*)$" (_ k v)
@@ -255,29 +275,125 @@ exec guile $GUILE_FLAGS -l $0 -e main "$@"
    comment-timestamp
    <))
 
+(define (parse-commit commit)
+  (let ((text (git "cat-file" "commit" commit)))
+    (match-bind
+     "\n\n(.*)$" text (_ message)
+     (acons
+      'message message
+      (match-lines (substring text 0 (- (string-length text) (string-length _)))
+                   "^([^ ]+) (.*)$" (_ k v)
+                   (cons (string->symbol k) v))))))
+
+(define (commit-utc-timestamp commit)
+  (match-bind
+   "^(.*) ([0-9]+) ([+-][0-9]+)" (assq-ref (parse-commit commit) 'committer)
+   (_ who ts tz)
+   (let ((ts (string->number ts)) (tz (string->number tz)))
+     (- ts (* (+ (* (quotient tz 100) 60) (remainder tz 100)) 60)))))
+
+(define (commit-parents commit)
+  (map cdr
+       (filter
+        (lambda (x) (eq? (car x) 'parent))
+        (parse-commit commit))))
+
 (define (build-comment-skeleton comments)
   (fold (lambda (sha1 parent)
-          (string-trim-both
-           (if parent
-               (git/input "comment" "commit-tree" sha1)
-               (git/input "comment" "commit-tree" "-p" parent sha1))))
+          (let* ((ts (comment-timestamp sha1))
+                 (env (list "GIT_COMMMITTER=tekuti"
+                            ;; this quoting is a hack
+                            (format #f "'GIT_COMMITTER_DATE=~a +0100'" ts)
+                            (format #f "'GIT_AUTHOR_DATE=~a +0100'" ts))))
+            (string-trim-both
+             (apply git/input+env "comment\n" env "commit-tree" sha1
+                    (if parent (list "-p" parent) '())))))
         #f
         comments))
 
-(post-comments "085138c227a15c1462138958868f8ef45741e5c5")
-(git/input "comment" "commit-tree" "fae8f17277f74fe1e0710fd3be6ebb7879b65969")
-(all-published-posts)
-(string-trim-both "aadabe54f0a4d141657f208645955a2c85af4e0b
-")
+(define (build-post-skeleton master posts)
+  (fold (lambda (sha1 parent)
+          (let* ((ts (post-timestamp sha1))
+                 (comments (build-comment-skeleton (post-comments sha1)))
+                 (env (list "GIT_COMMMITTER=tekuti"
+                            ;; this quoting is a hack
+                            (format #f "'GIT_COMMITTER_DATE=~a +0100'" ts)
+                            (format #f "'GIT_AUTHOR_DATE=~a +0100'" ts))))
+            (string-trim-both
+             (apply git/input+env "post\n" env "commit-tree" sha1
+                    "-p" master
+                    (append (if parent (list "-p" parent) '())
+                            (if comments (list "-p" comments) '()))))))
+        #f
+        (map cdr posts)))
 
+(define (reindex-posts master)
+  (build-post-skeleton master (all-published-posts master)))
 
-(post-metadata "9a83feef2c2304797ad295043d1f33d8e2dae52d")
+(define (hash-push! h key value)
+  (let ((handle (hash-create-handle! h key '())))
+    (set-cdr! handle (cons value (cdr handle)))))
 
-(define (reindex-posts)
+(define (make-tree alist)
+  (string-trim-both
+   (git/input+env (string-join
+                   (map (lambda (pair)
+                          (let ((name (car pair)) (sha (cdr pair)))
+                            (format #f "040000 tree ~a\t~a" sha name)))
+                        alist)
+                   "\n" 'suffix)
+                  '()
+                  "mktree")))
 
-(define (reindex)
-  (reindex-posts)
-  (reindex-categories))
+(define (compute-categories posts)
+  (let ((hash (make-hash-table)))
+    (for-each
+     (lambda (post-pair)
+       (for-each
+        (lambda (cat)
+          (hash-push! hash cat post-pair))
+        (post-categories (cdr post-pair))))
+     posts)
+    hash))
+
+(define (build-categories-tree master posts)
+  (if (null? posts)
+      #f
+      (let* ((hash (compute-categories posts))
+             (tree (make-tree (hash-map->list
+                               (lambda (k v) (cons k (make-tree v)))
+                               hash)))
+             (ts (commit-utc-timestamp master))
+             (env (list "GIT_COMMMITTER=tekuti"
+                        ;; this quoting is a hack
+                        (format #f "'GIT_COMMITTER_DATE=~a +0000'" ts)
+                        (format #f "'GIT_AUTHOR_DATE=~a +0000'" ts))))
+        (string-trim-both
+         (git/input+env "categories\n" env "commit-tree" tree
+                        "-p" master))))) ;; FIXME: keep history?
+
+(define (reindex-categories master)
+  (build-categories-tree master (all-published-posts master)))
+
+(define (fetch-heads master)
+  (map (lambda (spec)
+         (let ((ref (car spec)) (reindex (cdr spec)))
+           (let ((head (false-if-exception
+                        (string-trim-both (git "rev-parse" (car spec))))))
+             (cons
+              ref
+              (if (and head (member master (commit-parents head)))
+                  head
+                  (and=> (reindex master)
+                    (lambda (new)
+                      (if (not (false-if-exception 
+                                (if head
+                                    (git "update-ref" ref new head)
+                                    (git "branch" ref new))))
+                          (dbg "couldn't update ref ~a to ~a" ref new))
+                      new)))))))
+       `(("posts" . ,reindex-posts)
+         ("categories" . ,reindex-categories))))
 
 (define (handle-request headers post-data)
   (let-headers
@@ -312,6 +428,7 @@ exec guile $GUILE_FLAGS -l $0 -e main "$@"
 (define (connection-received socket sockaddr)
   (let ((headers (strip-headers socket))
         (post-data "")) ;; blocks: (read-delimited "" socket)))
+
     (dbg "~a" headers)
     (catch #t
            (lambda ()
@@ -330,6 +447,8 @@ exec guile $GUILE_FLAGS -l $0 -e main "$@"
     (close-port socket)))
 
 (define (event-loop socket)
+  (let ((master (string-trim-both (git "rev-parse" "master"))))
+    (pk (fetch-heads master)))
   (pk 'listening)
   (bind socket AF_INET (inet-aton *host*) *port*)
   (listen socket *backlog*)
