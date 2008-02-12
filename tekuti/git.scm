@@ -99,13 +99,13 @@
                "^(.+) tree (.+)\t(.+)$" (_ mode object name)
                (cons name object)))
 
-(define (parse-metadata treeish . specs)
+(define (parse-metadata treeish specs)
   (filter
    identity
    (match-lines (git "cat-file" "blob" treeish)
                 "^([^: ]+): +(.*)$" (_ k v)
                 (let* ((k (string->symbol k))
-                       (parse (assq-ref k specs)))
+                       (parse (assq-ref specs k)))
                   (if parse
                       (catch 'parse-error
                              (lambda ()

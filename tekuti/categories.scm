@@ -41,21 +41,5 @@
      posts)
     hash))
 
-(define (build-categories-tree master posts)
-  (if (null? posts)
-      #f
-      (let* ((hash (compute-categories posts))
-             (tree (make-tree (hash-map->list
-                               (lambda (k v) (cons k (make-tree v)))
-                               hash)))
-             (ts (commit-utc-timestamp master))
-             (env (list "GIT_COMMMITTER=tekuti"
-                        ;; this quoting is a hack
-                        (format #f "'GIT_COMMITTER_DATE=~a +0000'" ts)
-                        (format #f "'GIT_AUTHOR_DATE=~a +0000'" ts))))
-        (string-trim-both
-         (git/input+env "categories\n" env "commit-tree" tree
-                        "-p" master))))) ;; FIXME: keep history?
-
 (define (reindex-categories master)
-  (build-categories-tree master (all-published-posts master)))
+  (compute-categories (all-published-posts master)))

@@ -97,5 +97,6 @@
               (sockaddr (cdr pair)))
          (receive
           (cookie index) (maybe-reindex old-cookie old-index)
+          (pk cookie index)
           (connection-received (car pair) (cdr pair) index handle-request)
           (lp cookie index)))))))

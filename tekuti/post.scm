@@ -40,14 +40,14 @@
   (equal? (assq-ref post-alist 'status) "published"))
 
 (define (post-timestamp post-alist)
-  (or (assq-ref x 'timestamp) #f))
+  (or (assq-ref post-alist 'timestamp) #f))
 
 (define (post-categories post-alist)
-  (or (assq-ref x 'categories) '()))
+  (or (assq-ref post-alist 'categories) '()))
 
 (define *post-spec*
-  `((timestamp ,string->number)
-    (categories ,(lambda (v) (map string-trim-both (string-split v #\,))))))
+  `((timestamp . ,string->number)
+    (categories . ,(lambda (v) (map string-trim-both (string-split v #\,))))))
 
 (define (post-from-tree encoded-name sha1)
   (acons 'url encoded-name
@@ -72,21 +72,5 @@
    comment-timestamp
    <))
 
-(define (build-post-skeleton master posts)
-  (fold (lambda (sha1 parent)
-          (let* ((ts (post-timestamp sha1))
-                 (comments (build-comment-skeleton (post-comments sha1)))
-                 (env (list "GIT_COMMMITTER=tekuti"
-                            ;; this quoting is a hack
-                            (format #f "'GIT_COMMITTER_DATE=~a +0100'" ts)
-                            (format #f "'GIT_AUTHOR_DATE=~a +0100'" ts))))
-            (string-trim-both
-             (git* `("commit-tree" ,sha1
-                     ,@(if parent (list "-p" parent) '())
-                     ,@(if comments (list "-p" comments) '()))
-                   #:input "post\n" #:env env))))
-        #f
-        (map cdr posts)))
-
 (define (reindex-posts master)
-  (build-post-skeleton master (all-published-posts master)))
+  (all-published-posts master))

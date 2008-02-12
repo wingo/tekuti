@@ -43,13 +43,13 @@
 (debug-enable 'backtrace)
 
 (define *comment-spec*
-  `((timestamp ,string->number)))
+  `((timestamp . ,string->number)))
 (define (comment-from-tree encoded-name sha1)
   (acons 'encoded-name encoded-name
          (parse-metadata (string-append sha1 ":" "metadata") *comment-spec*)))
 
 (define (comment-timestamp comment-alist)
-  (or (assq-ref x 'timestamp) #f))
+  (or (assq-ref comment-alist 'timestamp) #f))
 
 (define (build-comment-skeleton comments)
   (fold (lambda (sha1 parent)
