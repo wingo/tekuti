@@ -39,33 +39,43 @@ exec guile $GUILE_FLAGS -l $0 -e main "$@"
              (tekuti mod-lisp)
              (tekuti web))
 
-(define (handle-request headers post-data)
-  (let ((heads (fetch-heads `(posts . ,reindex-posts)
-                            `(categories . ,reindex-categories))))
-    (let-headers
-     headers ((method "method") (path "url"))
-     (url-relative-path-case
-      method path
-      ((POST admin new-post)
-       (unimplemented 'new-post))
-      ((POST admin modify-post)
-       (unimplemented 'modify-post))
-      ((POST admin new-comment)
-       (unimplemented 'new-comment))
-      ((POST admin delete-comment)
-       (unimplemented 'delete-comment))
-      ((POST admin delete-post)
-       (unimplemented 'delete-post))
-      ((GET)
-       (unimplemented 'index))
-      ((GET archives year? month? day? post?)
-       (unimplemented 'archives))
-      ((GET debug)
-       (page-debug headers))
-      ((POST search)
-       (unimplemented 'search))
-      (else (page-not-found path))))))
-     
+(define (handle-request headers post-data index)
+  (let-headers headers ((method "method") (path "url"))
+    (url-relative-path-case
+     method path
+     ((POST admin new-post)
+      (unimplemented 'new-post))
+     ((POST admin modify-post)
+      (unimplemented 'modify-post))
+     ((POST admin new-comment)
+      (unimplemented 'new-comment))
+     ((POST admin delete-comment)
+      (unimplemented 'delete-comment))
+     ((POST admin delete-post)
+      (unimplemented 'delete-post))
+     ((GET)
+      (unimplemented 'index))
+     ((GET archives year? month? day? post?)
+      (unimplemented 'archives))
+     ((GET debug)
+      (page-debug headers))
+     ((POST search)
+      (unimplemented 'search))
+     (else (page-not-found path)))))
+
+(define (maybe-reindex old-master old-index)
+  (let ((master (git-rev-parse "master")))
+    (values
+     master 
+     (if (equal? master old-master)
+         old-index
+         (acons 'master master
+                (map (lambda (k reindex)
+                       (cons k (reindex master)))
+                     (list 'posts 'categories)
+                     (list reindex-posts reindex-categories)))))))
+
 (define (main args)
   (ensure-git-repo)
-  (event-loop handle-request))
+  (event-loop handle-request maybe-reindex))
+

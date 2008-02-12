@@ -26,6 +26,7 @@
 
 (define-module (tekuti mod-lisp)
   #:use-module (ice-9 rdelim)
+  #:use-module (ice-9 receive)
   #:use-module (sxml simple)
   #:use-module (sxml transform)
   #:use-module (tekuti url)
@@ -57,14 +58,14 @@
    "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\" "
    "\"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\">\n"))
 
-(define (connection-received socket sockaddr handle-request)
+(define (connection-received socket sockaddr index handle-request)
   (let ((headers (read-headers socket))
         (post-data "")) ;; blocks: (read-delimited "" socket)))
 
     (dbg "~a" headers)
     (catch #t
            (lambda ()
-             (let ((sxml (handle-request headers post-data)))
+             (let ((sxml (handle-request headers post-data index)))
                (write-headers '(("Status" . "200 OK")
                                 ("Content-Type" . "text/html"))
                               socket)
@@ -78,16 +79,23 @@
              
     (close-port socket)))
 
-(define (event-loop handle-request)
+(define (with-socket proc)
   (pk 'listening)
   (let ((socket (socket PF_INET SOCK_STREAM 0)))
     (bind socket AF_INET (inet-aton *host*) *port*)
     (listen socket *backlog*)
     (unwind-protect
-     (let lp ((pair (accept socket)))
-       (pk pair)
-       (connection-received (car pair) (cdr pair) handle-request)
-       (pk 'done)
-       (lp (accept socket)))
+     (proc socket)
      (shutdown socket 2))))
 
+(define (event-loop handle-request maybe-reindex)
+  (with-socket
+   (lambda (socket)
+     (let lp ((old-cookie #f) (old-index #f))
+       (let* ((pair (accept socket))
+              (fd (car pair))
+              (sockaddr (cdr pair)))
+         (receive
+          (cookie index) (maybe-reindex old-cookie old-index)
+          (connection-received (car pair) (cdr pair) index handle-request)
+          (lp cookie index)))))))

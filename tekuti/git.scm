@@ -34,7 +34,7 @@
   #:use-module (ice-9 regex) ; hack
   #:export (git git* ensure-git-repo git-ls-tree git-ls-subdirs
             parse-metadata parse-commit commit-utc-timestamp
-            commit-parents make-tree fetch-heads))
+            commit-parents make-tree git-rev-parse))
 
 (define (call-with-pipe pipe proc)
   (unwind-protect
@@ -148,25 +148,3 @@
 
 (define (git-rev-parse rev)
   (string-trim-both (git "rev-parse" rev)))
-
-(define (fetch-heads . heads)
-  (let ((master (git-rev-parse "master")))
-    (acons
-     'master master
-     (map (lambda (spec)
-            (let ((ref (car spec)) (reindex (cdr spec)))
-              (let ((head (false-if-exception
-                           (git-rev-parse (car spec)))))
-                (cons
-                 ref
-                 (if (and head (member master (commit-parents head)))
-                     head
-                     (and=> (reindex master)
-                            (lambda (new)
-                              (if (not (false-if-exception 
-                                        (if head
-                                            (git "update-ref" ref new head)
-                                            (git "branch" ref new))))
-                                  (dbg "couldn't update ref ~a to ~a" ref new))
-                              new)))))))
-          heads))))
