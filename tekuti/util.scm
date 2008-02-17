@@ -27,7 +27,8 @@
 (define-module (tekuti util)
   #:use-module (match-bind)
   #:use-module (srfi srfi-1)
-  #:export (expanduser match-lines dbg unwind-protect dbg dsu-sort hash-push!))
+  #:export (expanduser match-lines dbg unwind-protect dbg dsu-sort
+            hash-push! list-has-length? list-head-match))
 
 (define (expanduser path)
   (let ((parts (string-split path #\/)))
@@ -63,3 +64,17 @@
 (define (hash-push! h key value)
   (let ((handle (hash-create-handle! h key '())))
     (set-cdr! handle (cons value (cdr handle)))))
+
+(define (list-has-length? list len)
+  (cond
+   ((zero? len) (null? list))
+   ((null? list) #f)
+   (else (list-has-length? (cdr list) (1- len)))))
+
+;; returns tail of l2
+(define (list-head-match l1 l2 n)
+  (cond
+   ((zero? n) l2)
+   ((null? l2) #f)
+   ((not (equal? (car l1) (car l2))) #f)
+   (else (list-head-match (cdr l1) (cdr l2) (1- n)))))

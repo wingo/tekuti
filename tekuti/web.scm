@@ -31,7 +31,7 @@
   #:use-module (tekuti config)
   #:use-module (srfi srfi-1)
   #:export (read-headers write-headers let-headers
-            visible-error page-not-found unimplemented
+            visible-error unimplemented
             url-path-split url-path-case url-relative-path-case))
             
 (define (read-headers socket)
@@ -66,9 +66,6 @@
 (define (visible-error . html-body)
   (throw 'visible-error 404 html-body))
 
-(define (page-not-found path)
-  (throw 'html-error 404 path))
-
 (define (url-path-split path)
   (filter (lambda (x) (not (string-null? x)))
           (map url:decode (string-split path #\/))))
@@ -101,7 +98,7 @@
                      `((and (eq? ,method-sym ',method-match)
                             (equal? (list-head ,path-parts ,nreq)
                                     ',(list-head parts-match nreq))
-                            (< (length ,path-parts) ,nargs))
+                            (<= (length ,path-parts) ,nargs))
                        (apply
                         (lambda ,(map string->symbol (map optional-argument opt))
                           ,@body)

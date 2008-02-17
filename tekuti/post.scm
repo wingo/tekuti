@@ -31,7 +31,7 @@
   #:use-module (tekuti comment)
   #:use-module (tekuti git)
   #:use-module (srfi srfi-1)
-  #:export (reindex-posts post-categories all-published-posts))
+  #:export (reindex-posts post-from-tree post-categories all-published-posts))
   
 ;; introducing new assumption: post urls like yyyy/dd/mm/post; post dirnames the urlencoded post
 

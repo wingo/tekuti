@@ -145,12 +145,11 @@
 ;; include any character not in the SAFE-CHARS list and any
 ;; character that *is* in the RESERVED-CHARS list argument.
 
-(define-public (url:encode str reserved-chars)
+(define-public (url:encode str)
   (with-output-to-string
     (lambda ()
       (for-each (lambda (ch)
-		  (if (and (safe-char? ch)
-			   (not (memv ch reserved-chars)))
+		  (if (safe-char? ch)
 		      (display ch)
 		      (begin
 			(display #\%)

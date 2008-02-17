@@ -27,12 +27,16 @@
 (define-module (tekuti mod-lisp)
   #:use-module (ice-9 rdelim)
   #:use-module (ice-9 receive)
+  #:use-module (ice-9 stack-catch)
   #:use-module (sxml simple)
   #:use-module (sxml transform)
   #:use-module (tekuti url)
   #:use-module (tekuti util)
   #:use-module (tekuti config)
+  #:use-module (tekuti request)
   #:export (event-loop))
+
+;;; thought: ignore SIGPIPE, otherwise apache dying will kill us
 
 (define (read-headers socket)
   (define (read-line*)
@@ -58,24 +62,53 @@
    "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\" "
    "\"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\">\n"))
 
+(define (templatize request)
+  (let-request request (title body)
+    `(html (head
+            (title ,(or title "foo")))
+           (body
+            ,(or body '(p "what"))))))
+
+(define *status-names*
+  '((200 . "OK")
+    (404 . "Not Found")
+    (500 . "Internal Server Error")))
+
+(define (status->string status)
+  (format #f "~a ~a" status (or (assv-ref *status-names* status)
+                                "Unknown Error")))
+
+(define (write-body request socket)
+  (display xhtml-doctype socket)
+  (sxml->xml (templatize request) socket))
+
 (define (connection-received socket sockaddr index handle-request)
   (let ((headers (read-headers socket))
         (post-data "")) ;; blocks: (read-delimited "" socket)))
 
     (dbg "~a" headers)
-    (catch #t
-           (lambda ()
-             (let ((sxml (handle-request headers post-data index)))
-               (write-headers '(("Status" . "200 OK")
-                                ("Content-Type" . "text/html"))
-                              socket)
-               (display xhtml-doctype socket)
-               (sxml->xml sxml socket)))
-           (lambda args
-             (write-headers '(("Status" . "500 Internal Server Error")
-                              ("Content-Type" . "text/plain"))
-                            socket)
-             (write args socket)))
+    (catch
+     #t
+     (lambda ()
+       (let ((res (pk (handle-request
+                    (make-request 'headers headers
+                                  'post-data post-data)
+                    index))))
+         (let-request res ((status 200))
+           (write-headers `(("Status" . ,(status->string status))
+                            ("Content-Type" . "text/html"))
+                          socket)
+           (write-body res socket))))
+     (lambda args
+       (write-headers '(("Status" . "500 Internal Server Error")
+                        ("Content-Type" . "text/plain"))
+                      socket)
+       (write args socket)
+       (newline)
+       (with-output-to-port socket backtrace))
+     (lambda args
+       (fluid-set! the-last-stack (make-stack #t 2 0))
+       (apply throw args)))
              
     (close-port socket)))
 
@@ -88,15 +121,17 @@
      (proc socket)
      (shutdown socket 2))))
 
+(define (inner-loop socket cookie index handle-request maybe-reindex)
+  (let* ((pair (accept socket))
+         (fd (car pair))
+         (sockaddr (cdr pair)))
+    (receive
+     (new-cookie new-index) (maybe-reindex cookie index)
+     (pk new-cookie new-index)
+     (connection-received (car pair) (cdr pair) new-index handle-request)
+     (inner-loop socket new-cookie new-index handle-request maybe-reindex))))
+
 (define (event-loop handle-request maybe-reindex)
   (with-socket
    (lambda (socket)
-     (let lp ((old-cookie #f) (old-index #f))
-       (let* ((pair (accept socket))
-              (fd (car pair))
-              (sockaddr (cdr pair)))
-         (receive
-          (cookie index) (maybe-reindex old-cookie old-index)
-          (pk cookie index)
-          (connection-received (car pair) (cdr pair) index handle-request)
-          (lp cookie index)))))))
+     (inner-loop socket #f #f handle-request maybe-reindex))))

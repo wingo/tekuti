@@ -1,6 +1,6 @@
 #! /bin/bash
 # -*- scheme -*-
-exec guile $GUILE_FLAGS -l $0 -e main "$@"
+exec guile $GUILE_FLAGS -l $0 -e main -- "$@"
 !#
 ;; Tekuti
 ;; Copyright (C) 2008 Andy Wingo <wingo at pobox dot com>
@@ -30,52 +30,10 @@ exec guile $GUILE_FLAGS -l $0 -e main "$@"
 
 ;;hack!
 
-(debug-enable 'backtrace)
-(use-modules (tekuti git)
-             (tekuti page)
-             (tekuti util)
-             (tekuti post)
-             (tekuti categories)
-             (tekuti mod-lisp)
-             (tekuti web))
-
-(define (handle-request headers post-data index)
-  (let-headers headers ((method "method") (path "url"))
-    (url-relative-path-case
-     method path
-     ((POST admin new-post)
-      (unimplemented 'new-post))
-     ((POST admin modify-post)
-      (unimplemented 'modify-post))
-     ((POST admin new-comment)
-      (unimplemented 'new-comment))
-     ((POST admin delete-comment)
-      (unimplemented 'delete-comment))
-     ((POST admin delete-post)
-      (unimplemented 'delete-post))
-     ((GET)
-      (unimplemented 'index))
-     ((GET archives year? month? day? post?)
-      (unimplemented 'archives))
-     ((GET debug)
-      (page-debug headers))
-     ((POST search)
-      (unimplemented 'search))
-     (else (page-not-found path)))))
-
-(define (maybe-reindex old-master old-index)
-  (let ((master (git-rev-parse "master")))
-    (values
-     master 
-     (if (equal? master old-master)
-         old-index
-         (acons 'master master
-                (map (lambda (k reindex)
-                       (cons k (reindex master)))
-                     (list 'posts 'categories)
-                     (list reindex-posts reindex-categories)))))))
-
+(turn-on-debugging)
+(use-modules (tekuti boot))
 (define (main args)
-  (ensure-git-repo)
-  (event-loop handle-request maybe-reindex))
+  (start-stack 'tekuti
+               (boot args)))
+
 

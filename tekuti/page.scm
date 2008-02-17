@@ -25,13 +25,67 @@
 ;;; Code:
 
 (define-module (tekuti page)
-  #:export (page-debug))
+  #:use-module (tekuti git)
+  #:use-module (tekuti post)
+  #:use-module (tekuti request)
+  #:export (page-new-post 
+            page-modify-post 
+            page-new-comment 
+            page-delete-comment 
+            page-delete-post 
+            page-index 
+            page-show-post 
+            page-archives 
+            page-debug 
+            page-search 
+            page-show-post 
+            page-debug
+            page-not-found))
 
-(define (page-debug headers)
-  `(html (head (title "hello"))
-         (body (p "hello world!")
-               (table
-                (tr (th "header") (th "value"))
-                ,@(map (lambda (pair)
-                         `(tr (td ,(car pair)) (td ,(cdr pair))))
-                       headers)))))
+(define (make-post-slug y m day post)
+  (url:encode (format #f "~a/~a/~a" y m (url:encode post))))
+
+(define (show-post slug index)
+  `(sxml . (p "hello" ,slug)))
+
+(define (not-implemented request . args)
+  (rcons* request
+          'status 404
+          'body `(p "Not implemented:" ,(rref request 'url))))
+
+(define page-new-post not-implemented)
+(define page-modify-post not-implemented)
+(define page-new-comment not-implemented)
+(define page-delete-comment not-implemented)
+(define page-delete-post not-implemented)
+(define page-index not-implemented)
+
+(define (page-show-post request index year month day post)
+  (let ((slug (make-post-slug year month day post)))
+    (let ((tree (git-rev-parse (string-append (assq-ref index 'master) ":" slug))))
+      (let ((post (post-from-tree slug tree)))
+        `((title . "post")
+          (sxml . (pre ,(with-output-to-string
+                          (lambda ()
+                            (write post))))))))))
+
+(define page-archives not-implemented)
+
+(define (page-debug request index)
+  (rcons* request
+          'title "hello"
+          'body `(div
+                  (p "hello world!")
+                  (table
+                   (tr (th "header") (th "value"))
+                   ,@(map (lambda (pair)
+                            `(tr (td ,(car pair)) (td ,(cdr pair))))
+                          (rref request 'headers))))))
+
+(define page-search not-implemented)
+
+(define (page-not-found request index)
+  (rcons* request
+          'status 404
+          'body `(p "Not found:" ,(rref request 'url))))
+
