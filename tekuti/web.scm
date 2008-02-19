@@ -28,31 +28,37 @@
   #:use-module (sxml simple)
   #:use-module (sxml transform)
   #:use-module (tekuti url)
-  #:use-module (tekuti config)
+  #:use-module (tekuti request)
+  #:use-module (tekuti template)
+  #:use-module (tekuti page)
   #:use-module (srfi srfi-1)
-  #:export (read-headers write-headers let-headers
-            visible-error unimplemented
-            url-path-split url-path-case url-relative-path-case))
+  #:export (let-headers header-ref
+            handle-request))
             
-(define (read-headers socket)
-  (define (read-line*)
-    (let ((line (read-line socket)))
-      (if (eof-object? line)
-          (error "unexpected eof")
-          line)))
-  (let lp ((keys '()) (values '()))
-    (let ((k (read-line*)))
-      (if (string=? k "end")
-          (reverse (map cons keys values))
-          (lp (cons k keys) (cons (read-line*) values))))))
+(define *status-names*
+  '((200 . "OK")
+    (201 . "Created")
+    (404 . "Not Found")
+    (500 . "Internal Server Error")))
 
-(define (write-headers-headers headers port)
-  (for-each
-   (lambda (k v)
-     (format port "~a\n~a\n" k v))
-   (map car headers) (map cdr headers))
-  (display "end\n" port))
+(define (status->string status)
+  (format #f "~a ~a" status (or (assv-ref *status-names* status)
+                                "Unknown Error")))
 
+(define xhtml-doctype
+  (string-append
+   "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\" "
+   "\"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\">\n"))
+
+(define (request-output-headers request)
+  (let-request request ((output-headers '())
+                        (status 200)
+                        (content-type "text/html"))
+    (acons "Status" (status->string status)
+           (acons "Content-Type" content-type
+                  output-headers))))
+
+;;; useless macro
 (define-macro (let-headers headers bindings . body)
   (let ((headers-var (gensym)))
     `(let ((,headers-var ,headers))
@@ -63,64 +69,38 @@
                     bindings))
          ,@body))))
 
-(define (visible-error . html-body)
-  (throw 'visible-error 404 html-body))
+(define (finalize request)
+  ;; update output headers
+  ;; templatize body
+  (rpush* (rcons* request
+                  'sxml (templatize request)
+                  'doctype xhtml-doctype)
+          'output-headers
+          (cons "Status" (status->string (rref request 'status 200)))
+          'output-headers
+          (cons "Content-Type" (rref request 'content-type "text/html"))))
 
-(define (url-path-split path)
-  (filter (lambda (x) (not (string-null? x)))
-          (map url:decode (string-split path #\/))))
+(define (choose-handler request)
+  (request-path-case
+   request
+   ((GET admin) page-admin)
+   ((GET admin posts) page-admin-posts)
+   ((GET admin posts post-key!) page-admin-post)
+   ((POST admin new-post) page-admin-new-post)
+   ((POST admin new-comment post-key!) page-admin-new-comment)
+   ;; would be fine to have e.g. (DELETE admin posts posts-key!), but
+   ;; web browsers don't handle that
+   ((POST admin modify-post post-key!) page-admin-modify-post)
+   ((POST admin delete-comment comment-key!) page-admin-delete-comment)
+   ((POST admin delete-post post-key!) page-admin-delete-post)
+    
+   ((GET) page-index)
+   ((GET archives year? month? day?) page-archives)
+   ((GET archives year! month! day! post!) page-show-post)
+   ((GET debug) page-debug)
+   ((POST search) page-search)
+   (else page-not-found)))
 
-(define-macro (url-path-case method path . clauses)
-  (define (optional-argument arg)
-    (let ((len (string-length arg)))
-      (and (eqv? (string-ref arg (1- len)) #\?)
-           (substring arg 0 (1- len)))))
-  (let ((method-sym (gensym)) (path-parts (gensym)))
-    (define (process-clauses)
-      (map (lambda (clause)
-             (let ((pattern (car clause)) (body (cdr clause)))
-               (cond
-                ((eq? pattern 'else)
-                 clause)
-                (else
-                 (let* ((method-match (car pattern))
-                        (parts-match (map symbol->string (cdr pattern)))
-                        (nargs (length parts-match))
-                        (opt (or (find-tail optional-argument parts-match) '()))
-                        (nopt (length opt))
-                        (nreq (- nargs nopt)))
-                   (cond
-                    ((null? opt)
-                     `((and (eq? ,method-sym ',method-match)
-                            (equal? ,path-parts ',parts-match))
-                       ,@body))
-                    (else
-                     `((and (eq? ,method-sym ',method-match)
-                            (equal? (list-head ,path-parts ,nreq)
-                                    ',(list-head parts-match nreq))
-                            (<= (length ,path-parts) ,nargs))
-                       (apply
-                        (lambda ,(map string->symbol (map optional-argument opt))
-                          ,@body)
-                        (let ((tail (list-tail ,path-parts ,nreq)))
-                          (append tail (make-list (- ,nopt (length tail)) #f))))))))))))
-           clauses))
-    `(let ((,method-sym (string->symbol ,method))
-           (,path-parts (url-path-split ,path)))
-       (cond ,@(process-clauses)))))
-
-(define-macro (url-relative-path-case method path . clauses)
-  (let ((infix (map string->symbol (url-path-split *private-url-base*))))
-    (define (munge-clause clause)
-      (cond
-       ((eq? (car clause) 'else) clause)
-       (else
-        (let ((method (caar clause))
-              (parts (cdar clause))
-              (body (cdr clause)))
-          `((,method ,@infix ,@parts) ,@body)))))
-    `(url-path-case ,method ,path
-                    ,@(map munge-clause clauses))))
-
-(define (unimplemented . args)
-  (apply throw 'unimplemented args))
+(define (handle-request request index)
+  (let ((handler (choose-handler request)))
+    (pk (finalize (handler request index)))))

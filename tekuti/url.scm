@@ -48,6 +48,7 @@
 ;;     encoding methods (e.g. a url-scheme-reserved-char-alist)
 
 (define-module (tekuti url)
+  #:use-module ((srfi srfi-1) #:select (filter))
   #:use-module (ice-9 regex))
 
 ;; `url:scheme' is an unfortunate term, but it is the technical
@@ -156,8 +157,10 @@
 			(display (number->string (char->integer ch) 16)))))
 		(string->list str)))))
 
-(define safe-chars
-  '(#\$ #\- #\_ #\. #\+ #\! #\* #\' #\( #\) #\, #\; #\/ #\? #\: #\@ #\& #\=))
+(define special-chars
+  (string->list "$-_.+!*'()"))
+(define reserved-chars
+  (string->list ";/?:@&="))
 
 (define (safe-char? ch)
   ;; ``Thus, only alphanumerics, the special characters "$-_.+!*'(),", and
@@ -165,6 +168,13 @@
   ;; unencoded within a URL.'' RFC 1738, #2.2.
   (or (char-alphabetic? ch)
       (char-numeric? ch)
-      (memv ch safe-chars)))
+      (memv ch special-chars)))
+
+(define-public (url:path-split path)
+  (filter (lambda (x) (not (string-null? x)))
+          (map url:decode (string-split path #\/))))
+
+(define-public (url:path-join path)
+  (string-join (map url:encode path) "/"))
 
 ;;; www/url.scm ends here

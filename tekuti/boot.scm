@@ -35,49 +35,8 @@ exec guile $GUILE_FLAGS -l $0 -e main -- "$@"
   #:use-module (ice-9 getopt-long)
   #:use-module (ice-9 threads)
   #:use-module (tekuti git)
-  #:use-module (tekuti page)
-  #:use-module (tekuti util)
-  #:use-module (tekuti post)
-  #:use-module (tekuti url)
-  #:use-module (tekuti request)
-  #:use-module (tekuti categories)
   #:use-module (tekuti mod-lisp)
-  #:use-module (tekuti web)
   #:export (boot))
-
-(define (make-post-slug y m day post)
-  (url:encode (format #f "~a/~a/~a" y m (url:encode post))))
-
-(define (show-post slug index)
-  `(sxml . (p "hello" ,slug)))
-
-(define (handle-request request index)
-  ((request-path-case
-    request
-    ((POST admin new-post) page-new-post)
-    ((POST admin modify-post) page-modify-post)
-    ((POST admin new-comment) page-new-comment)
-    ((POST admin delete-comment) page-delete-comment)
-    ((POST admin delete-post) page-delete-post)
-    ((GET) page-index)
-    ((GET archives year? month? day?) page-archives)
-    ((GET archives year? month? day? post?) page-show-post)
-    ((GET debug) page-debug)
-    ((POST search) page-search)
-    (else page-not-found))
-   request index))
-
-(define (maybe-reindex old-master old-index)
-  (let ((master (git-rev-parse "master")))
-    (values
-     master 
-     (if (equal? master old-master)
-         old-index
-         (acons 'master master
-                (map (lambda (k reindex)
-                       (cons k (reindex master)))
-                     (list 'posts 'categories)
-                     (list reindex-posts reindex-categories)))))))
 
 (define *option-grammar* '((gds)
                            (usage)
@@ -120,4 +79,4 @@ exec guile $GUILE_FLAGS -l $0 -e main -- "$@"
 (define (boot args)
   (let ((options (parse-options args)))
     (ensure-git-repo)
-    (event-loop handle-request maybe-reindex)))
+    (event-loop)))

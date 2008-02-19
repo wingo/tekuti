@@ -31,13 +31,13 @@
   #:use-module (tekuti comment)
   #:use-module (tekuti git)
   #:use-module (srfi srfi-1)
-  #:export (reindex-posts post-from-tree post-categories all-published-posts))
+  #:export (reindex-posts post-from-tree post-from-key post-categories all-published-posts))
   
 ;; introducing new assumption: post urls like yyyy/dd/mm/post; post dirnames the urlencoded post
 
 ;; perhaps push this processing into post-from-tree
 (define (post-published? post-alist)
-  (equal? (assq-ref post-alist 'status) "published"))
+  (equal? (assq-ref post-alist 'status) "publish"))
 
 (define (post-timestamp post-alist)
   (or (assq-ref post-alist 'timestamp) #f))
@@ -47,11 +47,17 @@
 
 (define *post-spec*
   `((timestamp . ,string->number)
-    (categories . ,(lambda (v) (map string-trim-both (string-split v #\,))))))
+    (categories . ,(lambda (v) (map string-trim-both (string-split v #\,))))
+    (title . ,identity)))
 
 (define (post-from-tree encoded-name sha1)
-  (acons 'url encoded-name
+  (acons 'key encoded-name
          (parse-metadata (string-append sha1 ":" "metadata") *post-spec*)))
+
+(define (post-from-key master key)
+  (let ((pairs (git-ls-subdirs master key)))
+    (and (= (length pairs) 1)
+         (post-from-tree key (cdar pairs)))))
 
 (define (all-posts master)
   (map (lambda (pair)

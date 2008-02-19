@@ -55,9 +55,8 @@
   (fold (lambda (sha1 parent)
           (let* ((ts (comment-timestamp sha1))
                  (env (list "GIT_COMMMITTER=tekuti"
-                            ;; this quoting is a hack
-                            (format #f "'GIT_COMMITTER_DATE=~a +0100'" ts)
-                            (format #f "'GIT_AUTHOR_DATE=~a +0100'" ts))))
+                            (format #f "GIT_COMMITTER_DATE=~a +0100" ts)
+                            (format #f "GIT_AUTHOR_DATE=~a +0100" ts))))
             (string-trim-both
              (git* (cons* "commit-tree" sha1 (if parent (list "-p" parent) '()))
                    #:input "comment\n" #:env env))))

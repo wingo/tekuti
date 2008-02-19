@@ -25,14 +25,20 @@
 ;;; Code:
 
 (define-module (tekuti page)
+  #:use-module (tekuti config)
   #:use-module (tekuti git)
   #:use-module (tekuti post)
+  #:use-module (tekuti url)
   #:use-module (tekuti request)
-  #:export (page-new-post 
-            page-modify-post 
-            page-new-comment 
-            page-delete-comment 
-            page-delete-post 
+  #:use-module (srfi srfi-34)
+  #:export (page-admin
+            page-admin-posts
+            page-admin-post
+            page-admin-new-post
+            page-admin-new-comment
+            page-admin-modify-post 
+            page-admin-delete-comment 
+            page-admin-delete-post 
             page-index 
             page-show-post 
             page-archives 
@@ -42,40 +48,133 @@
             page-debug
             page-not-found))
 
-(define (make-post-slug y m day post)
-  (url:encode (format #f "~a/~a/~a" y m (url:encode post))))
+(define (relurl path . body)
+  `(a (@ (href ,(string-append *public-url-base* path)))
+      ,@body))
+
+(define (make-post-key . parts)
+  (url:encode (format #f "~{~a~^/~}" (map url:encode parts))))
 
 (define (show-post slug index)
   `(sxml . (p "hello" ,slug)))
 
 (define (not-implemented request . args)
   (rcons* request
-          'status 404
-          'body `(p "Not implemented:" ,(rref request 'url))))
+          'status 500
+          'body `((h1 "Not yet implemented")
+                  (p "Path handler not yet implemented: "
+                     ,(rref request 'path-str)))))
 
-(define page-new-post not-implemented)
-(define page-modify-post not-implemented)
+;; thought: url mapping for post modification? probably including git sha1
+
+(define (relform path . body)
+  `(form (@ (method "POST")
+            (action ,(string-append *public-url-base* path)))
+      ,@body))
+
+(define (page-admin request index)
+  ;; here we need to be giving a dashboard view instead of this
+  (define (post-headers)
+    (map (lambda (post)
+           ;; double-encoding is a hack to trick apache
+           `(li ,(relurl (string-append "admin/posts/" (url:encode (assq-ref post 'key)))
+                         (assq-ref post 'title))))
+         (assq-ref index 'posts)))
+  (rcons* request
+          'body `((h2 "all your posts")
+                  (ul ,@(post-headers))
+                  (h2 "are belong to tekuti")
+                  ,(apply
+                    relform
+                    "admin/new-post"
+                    `((div "title" (input (@ (name "title") (type "text"))))
+                      (div (textarea (@ (name "body") (rows "20") (cols "80"))
+                                     ""))
+                      (input (@ (type "submit") (value "new post"))))))))
+
+(define (page-admin-posts request index)
+  (define (post-headers)
+    (map (lambda (post)
+           ;; double encoding is a hack
+           `(div (h3 ,(relurl (string-append "admin/posts/"
+                                             (url:encode (assq-ref post 'key)))
+                              (assq-ref post 'title)))
+                 (p "This is a post")))
+         (assq-ref index 'posts)))
+  (rcons* request
+          'body `((h1 "all your posts are belong to tekuti")
+                  ,@(post-headers))))
+
+(define (page-admin-post request index key)
+  (let ((post (post-from-key (assq-ref index 'master) key)))
+    (pk 'foo post)
+    (rcons* request
+          'body `((h1 ,(assq-ref post 'title))
+                  "foo?"))))
+
+(define (decode-form-data request)
+  (let-request request (headers post-data)
+    (if (string-null? post-data)
+        '()
+        (let ((content-type (assoc-ref headers "content-type")))
+          (cond
+           ((equal? content-type "application/x-www-form-urlencoded")
+            (map
+             (lambda (piece)
+               (let ((equals (string-index piece #\=)))
+                 (if equals
+                     (cons (url:decode (substring piece 0 equals))
+                           (url:decode (substring piece (1+ equals))))
+                     (cons (url:decode piece) ""))))
+             (string-split post-data #\&)))
+           (else
+            (error "bad content-type" content-type)))))))
+
+(define (page-admin-new-post request index)
+  (let ((form-data (decode-form-data request)))
+    (rcons* request
+            'status 201         ; created
+            'output-headers (acons "Location" *public-url-base*
+                                   (rref request 'output-headers '()))
+            'body `((h1 "Created")
+                    (p "Created new post: " ,(assoc-ref form-data "title"))
+                    (pre ,(assoc-ref form-data "body"))))))
+
+
+;;                     (a (@ (href ,new-url)) ,new-url)
+
+(define (page-new-post request index)
+  ()
+  not-implemented)
+(define (page-modify-post request index)
+  ()
+  not-implemented)
 (define page-new-comment not-implemented)
 (define page-delete-comment not-implemented)
 (define page-delete-post not-implemented)
 (define page-index not-implemented)
 
 (define (page-show-post request index year month day post)
-  (let ((slug (make-post-slug year month day post)))
-    (let ((tree (git-rev-parse (string-append (assq-ref index 'master) ":" slug))))
-      (let ((post (post-from-tree slug tree)))
-        `((title . "post")
-          (sxml . (pre ,(with-output-to-string
-                          (lambda ()
-                            (write post))))))))))
+  (let ((slug (make-post-key year month day post)))
+    (cond
+     ((false-if-git-error
+       (git-rev-parse (string-append (assq-ref index 'master) ":" slug)))
+      => (lambda (tree)
+           (let ((post (post-from-tree slug tree)))
+             (rcons* request
+                     'title "post"
+                     'body `((pre ,(with-output-to-string
+                                     (lambda ()
+                                       (write post)))))))))
+     (else
+      (page-not-found request index)))))
 
 (define page-archives not-implemented)
 
 (define (page-debug request index)
   (rcons* request
           'title "hello"
-          'body `(div
-                  (p "hello world!")
+          'body `((p "hello world!")
                   (table
                    (tr (th "header") (th "value"))
                    ,@(map (lambda (pair)
@@ -85,7 +184,8 @@
 (define page-search not-implemented)
 
 (define (page-not-found request index)
+  (pk request)
   (rcons* request
           'status 404
-          'body `(p "Not found:" ,(rref request 'url))))
-
+          'body `((h1 "Page not found")
+                  (p "Unknown path: " ,(rref request 'path-str)))))

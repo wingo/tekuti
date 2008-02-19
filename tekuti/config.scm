@@ -34,6 +34,6 @@
 (define *backlog* 5)
 (define *git-dir* "~/blog.git")
 (define *git* "git")
-(define *public-url-base* "/")
+(define *public-url-base* "/blog/")
 (define *private-url-base* "/blog/")
 (define *debug* #t)

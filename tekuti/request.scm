@@ -25,26 +25,59 @@
 ;;; Code:
 
 (define-module (tekuti request)
-  #:use-module ((srfi srfi-1) #:select (find-tail))
+  #:use-module ((srfi srfi-1) #:select (find-tail fold))
   #:use-module (scheme kwargs)
   #:use-module (tekuti util)
+  #:use-module (tekuti url)
   #:use-module (tekuti config)
-  #:use-module (tekuti web)
-  #:export (make-request rcons rcons* rref let-request
+  #:export (make-request rcons rcons* rpush rpush* rref let-request
             request-path-case))
 
+(define (header-ref headers key default)
+  (let ((pair (assoc key headers)))
+    (if pair
+        (cdr pair)
+        default)))
+
+(define *request-initializers*
+  `((path . ,(lambda (r)
+               (let ((private-url-path (url:path-split *private-url-base*))
+                     (path (header-ref (rref r 'headers '())
+                                       "url" *private-url-base*)))
+                 (let* ((tail (list-head-match private-url-path
+                                               (url:path-split path)
+                                               (length private-url-path))))
+                   (or tail (error "unexpected path" path *private-url-base*))
+                   tail))))
+    (path-str . ,(lambda (r)
+                   (url:path-join (rref r 'path '()))))
+    (method . ,(lambda (r)
+                 (header-ref (rref r 'headers '()) "method" "GET")))))
+
 (define (make-request . keys-and-values)
-  (apply rcons* '() keys-and-values))
+  (fold (lambda (pair r)
+          (rcons (car pair) ((cdr pair) r) r))
+        (apply rcons* '() keys-and-values)
+        *request-initializers*))
 
 (define (rcons k v request)
   (or (symbol? k) (error "request keys should be symbols"))
   (acons k v request))
 
 (define (rcons* request . keys-and-values)
-  (let lp ((request '()) (kv keys-and-values))
+  (let lp ((request request) (kv keys-and-values))
     (if (null? kv)
         request
         (lp (rcons (car kv) (cadr kv) request) (cddr kv)))))
+
+(define (rpush k v request)
+  (rcons k (cons v (rref request k '())) request))
+
+(define (rpush* request . keys-and-values)
+  (let lp ((request request) (kv keys-and-values))
+    (if (null? kv)
+        request
+        (lp (rpush (car kv) (cadr kv) request) (cddr kv)))))
 
 (define/kwargs (rref request k (default #f) (default-proc #f))
   (let ((pair (assq k request)))
@@ -68,6 +101,10 @@
   (let ((path-var (gensym)))
     (define (optional-argument? arg)
       (eqv? (string-ref arg (1- (string-length arg))) #\?))
+    (define (required-argument? arg)
+      (eqv? (string-ref arg (1- (string-length arg))) #\!))
+    (define (output-argument? arg)
+      (or (optional-argument? arg) (required-argument? arg)))
     (define (process-clause clause)
       (or (list-has-length? clause 2) (error "foo"))
       (if (eq? (car clause) 'else)
@@ -75,40 +112,46 @@
           (let ((pat (map symbol->string (car clause)))
                 (proc (cadr clause)))
             (cond
-             ((find-tail optional-argument? pat)
+             ((find-tail output-argument? pat)
               => (lambda (tail)
                    (define test
-                     (let* ((len (length pat))
-                            (nopt (length tail))
-                            (nreq (- len nopt)))
+                     (let* ((npat (length pat))
+                            (ntail (length tail))
+                            (req (find-tail required-argument? tail))
+                            (opt (find-tail optional-argument? tail))
+                            (nopt (if opt (length opt) 0))
+                            (nreq (if req (- (length req) nopt) 0)))
                        (lambda (path)
-                         (let ((pathtail (list-head-match pat path nreq)))
-                           (if (and pathtail (<= (length pathtail) nopt))
-                               pathtail
+                         (let ((pathtail (list-head-match pat path (- npat ntail))))
+                           (pk pat npat ntail req opt nopt nreq path pathtail)
+                           (if (and pathtail (>= (length pathtail) nreq)
+                                    (<= (length pathtail) (+ nreq nopt)))
+                               (append pathtail
+                                       (make-list (- (+ nreq nopt) (length pathtail)) #f))
                                #f)))))
                    `((,test ,path-var)
-                     => (lambda (optargs)
+                     => (lambda (outargs)
                           (lambda args
-                            (apply ,proc (append args optargs)))))))
+                            (apply ,proc (append args outargs)))))))
              (else
               `((equal? ,path-var ',pat) ,proc))))))
     `(let ((,path-var ,path))
        (cond ,@(map process-clause clauses)))))
 
-;; hmm, style mismatch between these let macros
+(define (foldn kons n knil values)
+  (if (null? values)
+      knil
+      (foldn kons n
+             (apply kons knil (list-head values n))
+             (list-tail values n))))
+
+(define (rcons*-fold request . keys-and-procs)
+  (foldn (lambda (request k proc)
+           (rcons k (proc request) request))
+         2 request keys-and-procs))
+
 (define-macro (request-path-case request . clauses)
-  (define (make-path request)
-    (let ((private-url-path (url-path-split *private-url-base*)))
-      (let-request request (headers)
-        (let-headers headers ((method "method") (path "url"))
-          (let* ((tail (list-head-match private-url-path
-                                        (url-path-split path)
-                                        (length private-url-path))))
-            (if (not tail)
-                (error "unexpected path" path *private-url-base*)
-                (cons method tail)))))))
-  (let ((req-sym (gensym)))
-    `(let* ((,req-sym ,request))
-       (,path-proc-case
-        (,make-path ,req-sym)
-        ,@clauses))))
+  `(,path-proc-case
+    (,let-request ,request (method path)
+                  (cons method path))
+    ,@clauses))

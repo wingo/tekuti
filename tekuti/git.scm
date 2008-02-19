@@ -32,16 +32,57 @@
   #:use-module (scheme kwargs)
   #:use-module (match-bind)
   #:use-module (ice-9 regex) ; hack
-  #:export (git git* ensure-git-repo git-ls-tree git-ls-subdirs
+  #:use-module (srfi srfi-34)
+  #:use-module (srfi srfi-35)
+  #:export (&git-condition git-condition? git-condition-argv
+            git-condition-output git-condition-status false-if-git-error
+
+            git git* ensure-git-repo git-ls-tree git-ls-subdirs
             parse-metadata parse-commit commit-utc-timestamp
             commit-parents make-tree git-rev-parse))
 
-(define (call-with-pipe pipe proc)
-  (unwind-protect
-   (proc pipe)
-   (let ((ret (close-pipe pipe)))
-     (if (not (eq? (status:exit-val ret) 0))
-         (throw 'pipe-error proc ret)))))
+(define-condition-type &git-condition &condition git-condition?
+  (argv git-condition-argv)
+  (output git-condition-output)
+  (status git-condition-status))
+
+(define-macro (false-if-git-error . body)
+  `(,guard (c ((,git-condition? c) #f))
+           ,@body))
+
+(define (shell:quote str)
+  (with-output-to-string
+    (lambda ()
+      (display #\')
+      (for-each (lambda (ch)
+		  (if (eqv? ch #\')
+                      (begin (display #\\) (display #\'))
+                      (display ch)))
+		(string->list str))
+      (display #\'))))
+      
+(define (run-git env input-file args)
+  (define (prepend-env args)
+    (if (null? env)
+        args
+        (cons "/usr/bin/env" (append env args))))
+  (define (prepend-git args)
+    (cons* *git* "--bare" args))
+  (define (redirect-input args)
+    (if input-file
+        (list "/bin/sh" "-c" (string-join (map shell:quote args) " ")
+              "<" input-file)
+        args))
+  (let* ((real-args (pk (redirect-input (prepend-env (prepend-git args)))))
+         (pipe (apply open-pipe* OPEN_READ real-args))
+         (output (read-delimited "" pipe))
+         (ret (close-pipe pipe)))
+    (case (status:exit-val ret)
+      ((0) (if (eof-object? output) "" output))
+      (else (raise (condition (&git-condition
+                               (argv real-args)
+                               (output output)
+                               (status ret))))))))
 
 (define (call-with-temp-file contents proc)
   (let* ((template (string-copy "/tmp/tekutiXXXXXX"))
@@ -54,23 +95,12 @@
 
 (define/kwargs (git* args (input #f) (env '()))
   ;; foolishness regarding env
-  (define (nyam-nyam-nyam pipe)
-    (read-delimited "" pipe))
-  (cond
-   (input
-    (call-with-temp-file
-     input
-     (lambda (tempname)
-       (let ((cmd (string-join `("env" ,@env ,*git* "--bare" ,@args "<" ,input) " ")))
-         (pk cmd)
-         (call-with-pipe
-          (open-pipe* OPEN_BOTH "/bin/sh" "-c" cmd)
-          nyam-nyam-nyam)))))
-   (else
-    (pk args)
-    (call-with-pipe
-     (apply open-pipe* OPEN_READ *git* "--bare" args)
-     nyam-nyam-nyam))))
+  (if input
+      (call-with-temp-file
+       input
+       (lambda (tempname)
+         (run-git env tempname args)))
+      (run-git env #f args)))
 
 (define (git . args)
   (git* args))

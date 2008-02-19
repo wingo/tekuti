@@ -30,10 +30,15 @@
   #:use-module (ice-9 stack-catch)
   #:use-module (sxml simple)
   #:use-module (sxml transform)
-  #:use-module (tekuti url)
-  #:use-module (tekuti util)
   #:use-module (tekuti config)
+  #:use-module (tekuti util)
+  #:use-module (tekuti git) ; rev-parse
   #:use-module (tekuti request)
+  #:use-module (tekuti web)
+
+  ;; these for their reindex methods
+  #:use-module (tekuti post)
+  #:use-module (tekuti categories)
   #:export (event-loop))
 
 ;;; thought: ignore SIGPIPE, otherwise apache dying will kill us
@@ -50,55 +55,36 @@
           (reverse (map cons keys values))
           (lp (cons k keys) (cons (read-line*) values))))))
 
+(define (read-chars nchars port)
+  (let ((buf (make-string nchars)))
+    (read-delimited! "" buf port)
+    buf))
+
 (define (write-headers headers port)
   (for-each
-   (lambda (k v)
-     (format port "~a\n~a\n" k v))
-   (map car headers) (map cdr headers))
+   (lambda (pair)
+     (format port "~a\n~a\n" (car pair) (cdr pair)))
+   headers)
   (display "end\n" port))
 
-(define xhtml-doctype
-  (string-append
-   "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\" "
-   "\"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\">\n"))
-
-(define (templatize request)
-  (let-request request (title body)
-    `(html (head
-            (title ,(or title "foo")))
-           (body
-            ,(or body '(p "what"))))))
-
-(define *status-names*
-  '((200 . "OK")
-    (404 . "Not Found")
-    (500 . "Internal Server Error")))
-
-(define (status->string status)
-  (format #f "~a ~a" status (or (assv-ref *status-names* status)
-                                "Unknown Error")))
-
 (define (write-body request socket)
-  (display xhtml-doctype socket)
-  (sxml->xml (templatize request) socket))
+  (display (rref request 'doctype "") socket)
+  (sxml->xml (rref request 'sxml '()) socket))
 
-(define (connection-received socket sockaddr index handle-request)
-  (let ((headers (read-headers socket))
-        (post-data "")) ;; blocks: (read-delimited "" socket)))
-
-    (dbg "~a" headers)
+(define (connection-received socket sockaddr index)
+  (let* ((headers (pk (read-headers socket)))
+         (post-data (read-chars (string->number
+                                 (pk (or (assoc-ref headers "content-length")
+                                         "0")))
+                                socket)))
     (catch
      #t
      (lambda ()
-       (let ((res (pk (handle-request
-                    (make-request 'headers headers
-                                  'post-data post-data)
-                    index))))
-         (let-request res ((status 200))
-           (write-headers `(("Status" . ,(status->string status))
-                            ("Content-Type" . "text/html"))
-                          socket)
-           (write-body res socket))))
+       (let ((res (handle-request (make-request 'headers headers
+                                                'post-data post-data)
+                                  index)))
+         (write-headers (rref res 'output-headers '()) socket)
+         (write-body res socket)))
      (lambda args
        (write-headers '(("Status" . "500 Internal Server Error")
                         ("Content-Type" . "text/plain"))
@@ -121,17 +107,29 @@
      (proc socket)
      (shutdown socket 2))))
 
-(define (inner-loop socket cookie index handle-request maybe-reindex)
+(define (inner-loop socket cookie index)
   (let* ((pair (accept socket))
          (fd (car pair))
          (sockaddr (cdr pair)))
     (receive
      (new-cookie new-index) (maybe-reindex cookie index)
      (pk new-cookie new-index)
-     (connection-received (car pair) (cdr pair) new-index handle-request)
-     (inner-loop socket new-cookie new-index handle-request maybe-reindex))))
+     (connection-received (car pair) (cdr pair) new-index)
+     (inner-loop socket new-cookie new-index))))
 
-(define (event-loop handle-request maybe-reindex)
+(define (maybe-reindex old-master old-index)
+  (let ((master (git-rev-parse "master")))
+    (values
+     master 
+     (if (equal? master old-master)
+         old-index
+         (acons 'master master
+                (map (lambda (k reindex)
+                       (cons k (reindex master)))
+                     (list 'posts 'categories)
+                     (list reindex-posts reindex-categories)))))))
+
+(define (event-loop)
   (with-socket
    (lambda (socket)
-     (inner-loop socket #f #f handle-request maybe-reindex))))
+     (inner-loop socket #f #f))))
