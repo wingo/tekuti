@@ -122,7 +122,8 @@
 (define (git-ls-tree treeish path)
   (match-lines (git "ls-tree" treeish (or path "."))
                "^(.+) (.+) (.+)\t(.+)$" (_ mode type object name)
-               (list mode type object name)))
+               ;; reversed for assoc
+               (list name object type mode)))
 
 (define (git-ls-subdirs treeish path)
   (match-lines (git "ls-tree" treeish (or path "."))

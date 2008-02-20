@@ -31,7 +31,10 @@
   #:use-module (tekuti comment)
   #:use-module (tekuti git)
   #:use-module (srfi srfi-1)
-  #:export (reindex-posts post-from-tree post-from-key post-categories all-published-posts))
+  #:use-module (srfi srfi-19)
+  #:export (reindex-posts post-from-tree post-from-key post-categories
+            post-sxml-content post-raw-content all-published-posts
+            post-readable-date post-category-links))
   
 ;; introducing new assumption: post urls like yyyy/dd/mm/post; post dirnames the urlencoded post
 
@@ -51,8 +54,25 @@
     (title . ,identity)))
 
 (define (post-from-tree encoded-name sha1)
-  (acons 'key encoded-name
-         (parse-metadata (string-append sha1 ":" "metadata") *post-spec*)))
+  (let ((treels (git-ls-tree sha1 #f)))
+    (acons 'key encoded-name
+           (acons 'content-sha1 (and=> (assoc "content" treels) cadr)
+                  (parse-metadata (and=> (assoc "metadata" treels) cadr)
+                                  *post-spec*)))))
+
+(define (post-raw-content post)
+  (git "cat-file" "blob" (assq-ref post 'content-sha1)))
+
+(define (post-sxml-content post)
+  `(pre ,(post-raw-content post)))
+
+(define (post-readable-date post)
+  (let ((date (time-utc->date
+               (make-time time-utc 0 (assq-ref post 'timestamp)))))
+    (date->string date "~e ~B ~Y ~l:~M ~p")))
+
+(define (post-category-links post)
+  (post-categories post))
 
 (define (post-from-key master key)
   (let ((pairs (git-ls-subdirs master key)))

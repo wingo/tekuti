@@ -26,6 +26,7 @@
 
 (define-module (tekuti page)
   #:use-module (tekuti config)
+  #:use-module (tekuti util)
   #:use-module (tekuti git)
   #:use-module (tekuti post)
   #:use-module (tekuti url)
@@ -65,41 +66,55 @@
                   (p "Path handler not yet implemented: "
                      ,(rref request 'path-str)))))
 
-;; thought: url mapping for post modification? probably including git sha1
-
-(define (relform path . body)
+(define (post-editing-form post)
   `(form (@ (method "POST")
-            (action ,(string-append *public-url-base* path)))
-      ,@body))
+            (action ,(string-append *public-url-base* 
+                                    (if post
+                                        (string-append "admin/modify-post/"
+                                                       (url:encode (assq-ref post 'key)))
+                                        "admin/new-post"))))
+         (p "title: "
+            (input (@ (name "title") (type "text")
+                      (value ,(if post (assq-ref post 'title) "")))))
+         (div (textarea (@ (name "body") (rows "20") (cols "80"))
+                        ,(if post (post-raw-content post) "")))
+         (input (@ (type "submit")
+                   (value ,(if post "edit post" "new post"))))))
+
+(define (sidebar-ul body)
+  `(div (@ (id "menu"))
+        (ul ,@body)))
 
 (define (page-admin request index)
   ;; here we need to be giving a dashboard view instead of this
-  (define (post-headers)
-    (map (lambda (post)
-           ;; double-encoding is a hack to trick apache
-           `(li ,(relurl (string-append "admin/posts/" (url:encode (assq-ref post 'key)))
-                         (assq-ref post 'title))))
-         (assq-ref index 'posts)))
+  (define (post-links n)
+    (mapn (lambda (post)
+            `(li ,(admin-post-link post)))
+          (assq-ref index 'posts)
+          n))
   (rcons* request
-          'body `((h2 "all your posts")
-                  (ul ,@(post-headers))
-                  (h2 "are belong to tekuti")
-                  ,(apply
-                    relform
-                    "admin/new-post"
-                    `((div "title" (input (@ (name "title") (type "text"))))
-                      (div (textarea (@ (name "body") (rows "20") (cols "80"))
-                                     ""))
-                      (input (@ (type "submit") (value "new post"))))))))
+          'body `(,(sidebar-ul `((li (h2 ,(relurl "admin/posts" "posts"))
+                                     (ul ,@(post-links 10)))
+                                 (li (h2 "recent comments")
+                                     (p "ain't got none"))))
+                  (h2 "new post")
+                  ,(post-editing-form #f))))
+
+(define (admin-post-link post)
+  (relurl (string-append "admin/posts/"
+                         (url:encode (assq-ref post 'key)))
+          (assq-ref post 'title)))
+
+(define (post-link post)
+  (relurl (string-append "archives/" (url:decode (assq-ref post 'key)))
+          (assq-ref post 'title)))
 
 (define (page-admin-posts request index)
   (define (post-headers)
     (map (lambda (post)
-           ;; double encoding is a hack
-           `(div (h3 ,(relurl (string-append "admin/posts/"
-                                             (url:encode (assq-ref post 'key)))
-                              (assq-ref post 'title)))
-                 (p "This is a post")))
+           ;; double-encoding is a hack to trick apache
+           `(h3 ,(relurl (string-append "admin/posts/" (url:encode (assq-ref post 'key)))
+                         (assq-ref post 'title))))
          (assq-ref index 'posts)))
   (rcons* request
           'body `((h1 "all your posts are belong to tekuti")
@@ -110,7 +125,7 @@
     (pk 'foo post)
     (rcons* request
           'body `((h1 ,(assq-ref post 'title))
-                  "foo?"))))
+                  ,(post-editing-form post)))))
 
 (define (decode-form-data request)
   (let-request request (headers post-data)
@@ -140,15 +155,22 @@
                     (p "Created new post: " ,(assoc-ref form-data "title"))
                     (pre ,(assoc-ref form-data "body"))))))
 
+(define (show-post post)
+  `((h2 (@ (class "storytitle"))
+        ,(post-link post))
+    (div (@ (class "post"))
+         (h3 (@ (class "meta"))
+             ,(post-readable-date post)
+             " (" ,@(list-intersperse (post-category-links post)
+                                      " | ")
+             ")")
+         (div (@ (class "storycontent"))
+              ,(post-sxml-content post)))))
 
 ;;                     (a (@ (href ,new-url)) ,new-url)
 
-(define (page-new-post request index)
-  ()
-  not-implemented)
-(define (page-modify-post request index)
-  ()
-  not-implemented)
+(define (page-admin-modify-post request index key)
+  (not-implemented request index))
 (define page-new-comment not-implemented)
 (define page-delete-comment not-implemented)
 (define page-delete-post not-implemented)
@@ -161,11 +183,10 @@
        (git-rev-parse (string-append (assq-ref index 'master) ":" slug)))
       => (lambda (tree)
            (let ((post (post-from-tree slug tree)))
+             (pk post)
              (rcons* request
-                     'title "post"
-                     'body `((pre ,(with-output-to-string
-                                     (lambda ()
-                                       (write post)))))))))
+                     'title (assq-ref post 'title)
+                     'body (show-post post)))))
      (else
       (page-not-found request index)))))
 

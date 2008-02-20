@@ -28,7 +28,8 @@
   #:use-module (match-bind)
   #:use-module (srfi srfi-1)
   #:export (expanduser match-lines dbg unwind-protect dbg dsu-sort
-            hash-push! list-has-length? list-head-match))
+            hash-push! list-has-length? list-head-match mapn
+            list-intersperse))
 
 (define (expanduser path)
   (let ((parts (string-split path #\/)))
@@ -78,3 +79,15 @@
    ((null? l2) #f)
    ((not (equal? (car l1) (car l2))) #f)
    (else (list-head-match (cdr l1) (cdr l2) (1- n)))))
+
+(define (mapn proc l nmax)
+  (let lp ((in l) (out '()) (n nmax))
+    (if (or (null? in) (zero? n))
+        (reverse out)
+        (lp (cdr in) (cons (proc (car in)) out) (1- n)))))
+
+(define (list-intersperse src-l elem)
+  (if (null? src-l) src-l
+      (let loop ((l (cdr src-l)) (dest (cons (car src-l) '())))
+        (if (null? l) (reverse dest)
+            (loop (cdr l) (cons (car l) (cons elem dest)))))))
