@@ -31,7 +31,6 @@
   #:use-module (tekuti config)
   #:use-module (scheme kwargs)
   #:use-module (match-bind)
-  #:use-module (ice-9 regex) ; hack
   #:use-module (srfi srfi-34)
   #:use-module (srfi srfi-35)
   #:export (&git-condition git-condition? git-condition-argv
@@ -61,6 +60,12 @@
 		(string->list str))
       (display #\'))))
       
+(define *debug* #f)
+(define (trc . args)
+  (if *debug*
+      (apply pk args)
+      (car (last-pair args))))
+
 (define (run-git env input-file args)
   (define (prepend-env args)
     (if (null? env)
@@ -70,10 +75,11 @@
     (cons* *git* "--bare" args))
   (define (redirect-input args)
     (if input-file
-        (list "/bin/sh" "-c" (string-join (map shell:quote args) " ")
-              "<" input-file)
+        (list "/bin/sh" "-c"
+              (string-append (string-join (map shell:quote args) " ")
+                             "<" input-file))
         args))
-  (let* ((real-args (pk (redirect-input (prepend-env (prepend-git args)))))
+  (let* ((real-args (trc (redirect-input (prepend-env (prepend-git args)))))
          (pipe (apply open-pipe* OPEN_READ real-args))
          (output (read-delimited "" pipe))
          (ret (close-pipe pipe)))
@@ -87,7 +93,7 @@
 (define (call-with-temp-file contents proc)
   (let* ((template (string-copy "/tmp/tekutiXXXXXX"))
          (tmp (mkstemp! template)))
-    (display input tmp)
+    (display contents tmp)
     (close tmp)
     (unwind-protect
      (proc template)
@@ -99,6 +105,7 @@
       (call-with-temp-file
        input
        (lambda (tempname)
+         (trc input)
          (run-git env tempname args)))
       (run-git env #f args)))
 
@@ -130,19 +137,8 @@
                "^(.+) tree (.+)\t(.+)$" (_ mode object name)
                (cons name object)))
 
-(define (parse-metadata treeish specs)
-  (filter
-   identity
-   (match-lines (git "cat-file" "blob" treeish)
-                "^([^: ]+): +(.*)$" (_ k v)
-                (let* ((k (string->symbol k))
-                       (parse (assq-ref specs k)))
-                  (if parse
-                      (catch 'parse-error
-                             (lambda ()
-                               (cons k (parse v)))
-                             (lambda args #f))
-                      (cons k v))))))
+(define (parse-metadata treeish)
+  (with-input-from-string (git "show" treeish) read))
 
 (define (parse-commit commit)
   (let ((text (git "cat-file" "commit" commit)))

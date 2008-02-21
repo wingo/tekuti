@@ -1,0 +1,92 @@
+#! /bin/bash
+# -*- scheme -*-
+exec guile $GUILE_FLAGS -l $0 -e main -- "$@"
+!#
+;; Tekuti
+;; Copyright (C) 2008 Andy Wingo <wingo at pobox dot com>
+
+;; This program is free software; you can redistribute it and/or    
+;; modify it under the terms of the GNU General Public License as   
+;; published by the Free Software Foundation; either version 3 of   
+;; the License, or (at your option) any later version.              
+;;                                                                  
+;; This program is distributed in the hope that it will be useful,  
+;; but WITHOUT ANY WARRANTY; without even the implied warranty of   
+;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the    
+;; GNU General Public License for more details.                     
+;;                                                                  
+;; You should have received a copy of the GNU General Public License
+;; along with this program; if not, contact:
+;;
+;; Free Software Foundation           Voice:  +1-617-542-5942
+;; 59 Temple Place - Suite 330        Fax:    +1-617-542-2652
+;; Boston, MA  02111-1307,  USA       gnu@gnu.org
+
+;;; Commentary:
+;;
+;; This is the main script that will launch tekuti.
+;;
+;;; Code:
+
+;; (turn-on-debugging)
+(use-modules (tekuti git) (tekuti post))
+
+;; order: name object type mode
+(define (make-tree-full alist)
+  (string-trim-both
+   (git* '("mktree")
+         #:input (string-join
+                  (map (lambda (l)
+                         (apply format #f "~a ~a ~a\t~a"
+                                (reverse l)))
+                       alist)
+                  "\n" 'suffix))))
+
+(define (create-blob contents)
+  (string-trim-both
+   (git* '("hash-object" "-w" "--stdin") #:input contents)))
+
+(define (munge-comment sha1)
+  (let ((dir (git-ls-tree sha1 #f))
+        (metadata (parse-metadata (string-append sha1 ":metadata")
+                                  (@@ (tekuti comment) *comment-spec*))))
+    (set! dir (assoc-set! dir "metadata"
+                          (list (create-blob (with-output-to-string
+                                               (lambda () (write metadata))))
+                                "blob" "100644")))
+    (make-tree-full dir)))
+
+(define (munge-comments alist)
+  (let ((comments (make-tree
+                   (map (lambda (pair)
+                          (cons (car pair) (munge-comment (cdr pair))))
+                        alist))))
+    (make-tree (acons "comments" comments '()))))
+
+(define (munge-post pair)
+  (let* ((sha1 (cdr pair))
+         (dir (git-ls-tree sha1 #f))
+         (metadata (parse-metadata (string-append sha1 ":metadata")
+                                   (@@ (tekuti post) *post-spec*))))
+    (set! dir (assoc-set! dir "metadata"
+                          (list (create-blob (with-output-to-string
+                                               (lambda () (write metadata))))
+                                "blob" "100644")))
+    (if (assoc "comments" dir)
+        (set! dir (assoc-set! dir "comments"
+                              (list (munge-comments (git-ls-subdirs (string-append sha1 ":comments/") #f))
+                                    "tree" "040000"))))
+    (pk 'out (cons (car pair) (make-tree-full dir)))))
+
+(define (main args)
+  (ensure-git-repo)
+  (let* ((master (git-rev-parse "master"))
+         (posts (git-ls-subdirs master #f)))
+    (let ((new-tree (make-tree (map munge-post posts))))
+      (write
+       (git* `("commit-tree" ,new-tree "-p" ,master)
+             #:input "upgraded metadata to s-expressions")))))
+
+
+
+

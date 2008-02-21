@@ -4,41 +4,12 @@ import sys
 import tempfile
 import MySQLdb as db
 import os
+import urllib
+import time
 
 cxn = None
 
 def all_posts():
-  `ID` bigint(20) unsigned NOT NULL auto_increment,
-  `post_author` bigint(20) NOT NULL default '0',
-  `post_date` datetime NOT NULL default '0000-00-00 00:00:00',
-  `post_date_gmt` datetime NOT NULL default '0000-00-00 00:00:00',
-  `post_content` longtext NOT NULL,
-  `post_title` text NOT NULL,
-  `post_category` int(4) NOT NULL default '0',
-  `post_excerpt` text NOT NULL,
-  `post_lat` float default NULL,
-  `post_lon` float default NULL,
-  `post_status` enum('publish','draft','private','static','object','attachment') NOT NULL default 'publish',
-  `comment_status` enum('open','closed','registered_only') NOT NULL default 'open',
-  `ping_status` enum('open','closed') NOT NULL default 'open',
-  `post_password` varchar(7) NOT NULL default '',
-  `post_name` varchar(67) NOT NULL default '',
-  `to_ping` text NOT NULL,
-  `pinged` text NOT NULL,
-  `post_modified` datetime NOT NULL default '0000-00-00 00:00:00',
-  `post_modified_gmt` datetime NOT NULL default '0000-00-00 00:00:00',
-  `post_content_filtered` text NOT NULL,
-  `post_parent` bigint(20) NOT NULL default '0',
-  `guid` varchar(85) NOT NULL default '',
-  `menu_order` int(11) NOT NULL default '0',
-  `post_type` varchar(34) NOT NULL default '',
-  `post_mime_type` varchar(34) NOT NULL default '',
-  `comment_count` bigint(20) NOT NULL default '0',
-  PRIMARY KEY  (`ID`),
-  KEY `post_date` (`post_date`),
-  KEY `post_date_gmt` (`post_date_gmt`),
-  KEY `post_name` (`post_name`),
-  KEY `post_status` (`post_status`)
     cur = cxn.cursor()
     sql = ('select ID, post_author, post_date_gmt, post_content,'
            '       post_title, post_status, comment_status, post_name,'
@@ -55,16 +26,78 @@ def all_posts():
         else:
             break
 
-def write_post(post):
-    print post['name']
+def post_categories(post):
+    cur = cxn.cursor()
+    sql = ('select cat_name from wp_categories c, wp_post2cat p2c'
+           ' where p2c.post_id=%s and p2c.category_id=c.cat_ID')
+    cur.execute(sql, (post['id'],))
+    return [row[0] for row in cur.fetchall()]
+
+def post_comments(post):
+    cur = cxn.cursor()
+    sql = ('select comment_ID, comment_author, comment_author_email,'
+           '       comment_author_url, comment_author_IP,'
+           '       comment_date, comment_date_gmt, comment_content, comment_approved'
+           '  from wp_comments where comment_post_ID=%s')
+    cur.execute(sql, (post['id'],))
+    keys = ('id', 'author', 'author_email', 'author_url', 'author_ip',
+            'date', 'date-gmt', 'content', 'approved')
+    return [dict(zip(keys, row)) for row in cur.fetchall()]
+
+def write_file(path, content):
+    f = open(path, 'w')
+    f.write(content)
+    f.close()
+
+def make_dir(path):
+    os.mkdir(path)
+    return path + '/'
+
+def write_comment(comment, dir):
+    def make_metadata():
+        out = ''
+        for k, v in comment.items():
+            if k not in ('content',):
+                out += '%s: %s\n' % (k, v)
+        date = comment['date-gmt'] or comment['date']
+        out += 'timestamp: %s\n' % int(time.mktime(date.timetuple()))
+        return out
+
+    d = make_dir(dir + str(comment['id']))
+    write_file(d + 'content', comment['content'])
+    write_file(d + 'metadata', make_metadata())
+
+def make_post_key(post):
+    d = post['date']
+    pre = '%d/%02d/%02d/%s' % (d.year, d.month, d.day, post['name'])
+    return urllib.quote(pre, '')
+
+def write_post(post, categories, comments):
+    def make_metadata():
+        out = ''
+        for k, v in post.items():
+            if k not in ('content', 'content_filtered'):
+                out += '%s: %s\n' % (k, v)
+        out += 'categories: %s\n' % ', '.join(categories)
+        out += 'timestamp: %s\n' % int(time.mktime(post['date'].timetuple()))
+        return out
+
+    key = make_post_key(post)
+    d = make_dir(key)
+    write_file(d + 'content', post['content'])
+    write_file(d + 'content-filtered', post['content_filtered'])
+    write_file(d + 'metadata', make_metadata())
+    c = make_dir(d + 'comments')
+    for comment in comments:
+        write_comment(comment, c)
 
 def main(args):
     global cxn
     d = tempfile.mkdtemp(prefix='wp2dir')
     print 'writing dir', d
     os.chdir(d)
-    _, host, user, passwd, db = args
-    cxn = db.connect(host=host, user=user, passwd=passwd, db=db)
+    _, host, user, passwd, database = args
+    cxn = db.connect(host=host, user=user, passwd=passwd, db=database)
     for post in all_posts():
         write_post (post, post_categories (post), post_comments (post))
     

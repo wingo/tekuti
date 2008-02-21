@@ -41,5 +41,5 @@
      posts)
     hash))
 
-(define (reindex-categories master)
-  (compute-categories (all-published-posts master)))
+(define (reindex-categories index)
+  (compute-categories (assq-ref index 'posts)))

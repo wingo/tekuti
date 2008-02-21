@@ -31,8 +31,6 @@
   #:use-module (srfi srfi-1)
   #:export (comment-from-tree build-comment-skeleton))
 
-(use-modules (ice-9 regex))
-
 (use-modules (ice-9 rdelim)
              (ice-9 popen)
              (srfi srfi-1)
@@ -40,13 +38,12 @@
              (tekuti url)
              (match-bind)
              (sxml transform))
-(debug-enable 'backtrace)
 
 (define *comment-spec*
   `((timestamp . ,string->number)))
 (define (comment-from-tree encoded-name sha1)
   (acons 'encoded-name encoded-name
-         (parse-metadata (string-append sha1 ":" "metadata") *comment-spec*)))
+         (parse-metadata (string-append sha1 ":" "metadata"))))
 
 (define (comment-timestamp comment-alist)
   (or (assq-ref comment-alist 'timestamp) #f))

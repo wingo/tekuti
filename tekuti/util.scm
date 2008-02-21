@@ -29,7 +29,7 @@
   #:use-module (srfi srfi-1)
   #:export (expanduser match-lines dbg unwind-protect dbg dsu-sort
             hash-push! list-has-length? list-head-match mapn
-            list-intersperse))
+            list-intersperse with-backtrace define-memoized))
 
 (define (expanduser path)
   (let ((parts (string-split path #\/)))
@@ -91,3 +91,45 @@
       (let loop ((l (cdr src-l)) (dest (cons (car src-l) '())))
         (if (null? l) (reverse dest)
             (loop (cdr l) (cons (car l) (cons elem dest)))))))
+
+(define (handle-error key . args)
+  (let ((cep (current-error-port))
+        (highlights (if (or (eq? key 'wrong-type-arg)
+                            (eq? key 'out-of-range))
+                        (list-ref args 3)
+                        '())))
+    (newline cep)
+    (display "Backtrace:\n")
+    (display-backtrace (fluid-ref the-last-stack) cep
+                       #f #f highlights)
+    (newline cep)
+    (if (= (length args) 4)
+        (apply display-error (fluid-ref the-last-stack) cep args)
+        (format cep "~a" args))
+    (force-output cep)
+    (apply throw key args)))
+
+(define (with-backtrace proc)
+  (debug-enable 'backtrace)
+  (start-stack 'with-backtrace
+               (catch #t
+                      proc
+                      handle-error
+                      (lambda args
+                        (fluid-set! the-last-stack (make-stack #t 2 0))
+                        (apply throw args)))))
+
+(define (memoize1 proc)
+  (let ((old-args #f) (cache #f) (proc proc))
+    (lambda args
+      (if (equal? args old-args)
+          cache
+          (let ((val (apply proc args)))
+            (set! old-args args)
+            (set! cache val)
+            val)))))
+
+(define-macro (define-memoized form . body)
+  `(begin
+     (define ,form ,@body)
+     (set! ,(car form) (,memoize1 ,(car form)))))

@@ -30,7 +30,7 @@ exec guile $GUILE_FLAGS -l $0 -e main -- "$@"
 
 ;;hack!
 
-(turn-on-debugging)
+;(turn-on-debugging)
 (use-modules (tekuti boot))
 (define (main args)
   (start-stack 'tekuti

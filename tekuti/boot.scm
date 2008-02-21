@@ -34,6 +34,7 @@ exec guile $GUILE_FLAGS -l $0 -e main -- "$@"
   #:use-module (ice-9 format)
   #:use-module (ice-9 getopt-long)
   #:use-module (ice-9 threads)
+  #:use-module (tekuti util)
   #:use-module (tekuti git)
   #:use-module (tekuti mod-lisp)
   #:export (boot))
@@ -73,7 +74,10 @@ exec guile $GUILE_FLAGS -l $0 -e main -- "$@"
           (version)
           (exit 0)))
     (if (option-ref opts 'gds #f)
-        (make-thread (@ (ice-9 gds-client) run-utility)))
+        (let ((run-utility (@ (ice-9 gds-client) run-utility)))
+          (make-thread
+           (lambda ()
+             (with-backtrace run-utility)))))
     opts))
 
 (define (boot args)

@@ -28,6 +28,7 @@
   #:use-module (ice-9 rdelim)
   #:use-module (ice-9 receive)
   #:use-module (ice-9 stack-catch)
+  #:use-module ((srfi srfi-1) #:select (fold))
   #:use-module (sxml simple)
   #:use-module (sxml transform)
   #:use-module (tekuti config)
@@ -74,8 +75,8 @@
 (define (connection-received socket sockaddr index)
   (let* ((headers (pk (read-headers socket)))
          (post-data (read-chars (string->number
-                                 (pk (or (assoc-ref headers "content-length")
-                                         "0")))
+                                 (or (assoc-ref headers "content-length")
+                                     "0"))
                                 socket)))
     (catch
      #t
@@ -101,21 +102,39 @@
 (define (with-socket proc)
   (pk 'listening)
   (let ((socket (socket PF_INET SOCK_STREAM 0)))
+    (setsockopt socket SOL_SOCKET SO_REUSEADDR 1)
     (bind socket AF_INET (inet-aton *host*) *port*)
     (listen socket *backlog*)
     (unwind-protect
      (proc socket)
      (shutdown socket 2))))
 
-(define (inner-loop socket cookie index)
-  (let* ((pair (accept socket))
-         (fd (car pair))
-         (sockaddr (cdr pair)))
-    (receive
-     (new-cookie new-index) (maybe-reindex cookie index)
-     (pk new-cookie new-index)
-     (connection-received (car pair) (cdr pair) new-index)
-     (inner-loop socket new-cookie new-index))))
+(define (with-time-debugging proc)
+  (let ((start (gettimeofday)))
+    (pk 'start-clock)
+    (let ((val (proc)))
+      (let ((stop (gettimeofday)))
+        (pk 'stop-clock (+ (- (car stop) (car start))
+                           (* 1e-6 (- (cdr stop) (cdr start)))))
+        
+        val))))
+
+(define indices                          
+  `((posts . ,reindex-posts)
+    (categories . ,reindex-categories)))
+
+(use-modules (statprof))
+(define (reindex master)
+  (with-backtrace
+   (lambda ()
+     (with-time-debugging
+      (lambda ()
+        (with-statprof #:hz 100
+                       (fold (lambda (pair index)
+                               (acons (car pair) ((cdr pair) index)
+                                      index))
+                             (acons 'master master '())
+                             indices)))))))
 
 (define (maybe-reindex old-master old-index)
   (let ((master (git-rev-parse "master")))
@@ -123,13 +142,23 @@
      master 
      (if (equal? master old-master)
          old-index
-         (acons 'master master
-                (map (lambda (k reindex)
-                       (cons k (reindex master)))
-                     (list 'posts 'categories)
-                     (list reindex-posts reindex-categories)))))))
+         (reindex master)))))
+
+(define (inner-loop socket cookie index)
+  (let* ((pair (accept socket))
+         (fd (car pair))
+         (sockaddr (cdr pair)))
+    (receive
+     (new-cookie new-index) (maybe-reindex cookie index)
+     (connection-received (car pair) (cdr pair) new-index)
+     (inner-loop socket new-cookie new-index))))
 
 (define (event-loop)
   (with-socket
    (lambda (socket)
-     (inner-loop socket #f #f))))
+     (format #t "running initial index\n")
+     (receive
+      (master index) (maybe-reindex #f #f)
+      (format #t "entering inner loop\n")
+      (inner-loop socket master index)))))
+

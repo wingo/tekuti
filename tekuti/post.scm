@@ -30,6 +30,7 @@
   #:use-module (tekuti util)
   #:use-module (tekuti comment)
   #:use-module (tekuti git)
+  #:use-module (tekuti filters)
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-19)
   #:export (reindex-posts post-from-tree post-from-key post-categories
@@ -53,18 +54,20 @@
     (categories . ,(lambda (v) (map string-trim-both (string-split v #\,))))
     (title . ,identity)))
 
-(define (post-from-tree encoded-name sha1)
-  (let ((treels (git-ls-tree sha1 #f)))
-    (acons 'key encoded-name
-           (acons 'content-sha1 (and=> (assoc "content" treels) cadr)
-                  (parse-metadata (and=> (assoc "metadata" treels) cadr)
-                                  *post-spec*)))))
+(define-memoized (post-from-tree encoded-name sha1)
+  (acons 'key encoded-name
+         (acons 'content-ref (string-append sha1 ":content")
+                (parse-metadata (string-append sha1 ":metadata")))))
 
 (define (post-raw-content post)
-  (git "cat-file" "blob" (assq-ref post 'content-sha1)))
+  (git "show" (assq-ref post 'content-ref)))
 
 (define (post-sxml-content post)
-  `(pre ,(post-raw-content post)))
+  (let ((format (or (assq-ref post 'format) 'wordpress)))
+    ((case format
+       ((wordpress) wordpress->sxml)
+       (else (lambda (text) `(pre ,text))))
+     (post-raw-content post))))
 
 (define (post-readable-date post)
   (let ((date (time-utc->date
@@ -98,5 +101,5 @@
    comment-timestamp
    <))
 
-(define (reindex-posts master)
-  (all-published-posts master))
+(define (reindex-posts index)
+  (all-published-posts (assq-ref index 'master)))
