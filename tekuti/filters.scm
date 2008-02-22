@@ -77,6 +77,8 @@
             (cons (car in) (pclose p out))))))))
 
 (define (wordpress->sxml text)
+  (catch 'parser-error
+(lambda ()
   (let ((sxml (cadr (with-input-from-string (string-append "<div>" text "</div>")
                       xml->sxml))))
     (pre-post-order
@@ -87,3 +89,8 @@
                            (cons tag body))))
        (*text* . ,(lambda (tag text)
                     text))))))
+         (lambda (key . args)
+           `(pre "parse error: "
+                 ,(with-output-to-string (lambda () (write args)))
+                 "\n"
+                 ,text))))

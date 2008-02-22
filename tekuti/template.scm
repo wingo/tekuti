@@ -58,6 +58,6 @@
               (a (@ ,(href "")) "wingolog"))
           ,(make-navbar)
           (div (@ (id "content"))
-               ,@(rref request 'body '(p "what")))
+               ,@(rref request 'body '((p "what"))))
           (div (@ (id "footer"))
                "powered by sxml")))))

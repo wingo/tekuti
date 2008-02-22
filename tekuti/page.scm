@@ -181,7 +181,13 @@
 (define page-new-comment not-implemented)
 (define page-delete-comment not-implemented)
 (define page-delete-post not-implemented)
-(define page-index not-implemented)
+
+(define (page-index request index)
+  (rcons* request
+          'title "my bloggidy blog"
+          'body (map (lambda (post)
+                       (show-post post #f))
+                     (take-max (assq-ref index 'posts) 10))))
 
 (define (page-show-post request index year month day post)
   (let ((slug (make-post-key year month day post)))

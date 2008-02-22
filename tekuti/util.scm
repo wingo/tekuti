@@ -29,6 +29,7 @@
   #:use-module (srfi srfi-1)
   #:export (expanduser match-lines dbg unwind-protect dbg dsu-sort
             hash-push! list-has-length? list-head-match mapn
+            take-max
             list-intersperse with-backtrace define-memoized))
 
 (define (expanduser path)
@@ -65,6 +66,11 @@
 (define (hash-push! h key value)
   (let ((handle (hash-create-handle! h key '())))
     (set-cdr! handle (cons value (cdr handle)))))
+
+(define (take-max list n)
+  (if (or (null? list) (zero? n))
+      '()
+      (cons (car list) (take-max (cdr list) (1- n)))))
 
 (define (list-has-length? list len)
   (cond

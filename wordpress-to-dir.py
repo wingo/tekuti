@@ -38,7 +38,7 @@ def post_comments(post):
     sql = ('select comment_ID, comment_author, comment_author_email,'
            '       comment_author_url, comment_author_IP,'
            '       comment_date, comment_date_gmt, comment_content, comment_approved'
-           '  from wp_comments where comment_post_ID=%s')
+           '  from wp_comments where comment_post_ID=%s where comment_approved!=\'spam\'')
     cur.execute(sql, (post['id'],))
     keys = ('id', 'author', 'author_email', 'author_url', 'author_ip',
             'date', 'date-gmt', 'content', 'approved')
@@ -70,7 +70,7 @@ def write_comment(comment, dir):
 def make_post_key(post):
     d = post['date']
     pre = '%d/%02d/%02d/%s' % (d.year, d.month, d.day, post['name'])
-    return urllib.quote(pre, '')
+    return urllib.quote(pre, '').tolower()
 
 def write_post(post, categories, comments):
     def make_metadata():

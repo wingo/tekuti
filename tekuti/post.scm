@@ -150,8 +150,8 @@
 
 (define (post-sxml-n-comments post)
   `(div (@ (class "feedback"))
-        (a (@ (href ,(string-append *public-url-base* "/archives/"
-                                    (assq-ref post 'encoded-name)
+        (a (@ (href ,(string-append *public-url-base* "archives/"
+                                    (url:decode (assq-ref post 'key))
                                     "#comments")))
            "(" ,(post-n-comments post) ")")))
 
