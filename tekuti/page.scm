@@ -32,6 +32,8 @@
   #:use-module (tekuti url)
   #:use-module (tekuti request)
   #:use-module (srfi srfi-34)
+  #:use-module (srfi srfi-19)
+  #:use-module (scheme kwargs)
   #:export (page-admin
             page-admin-posts
             page-admin-post
@@ -43,6 +45,8 @@
             page-index 
             page-show-post 
             page-archives 
+            page-show-tags
+            page-show-tag
             page-debug 
             page-search 
             page-show-post 
@@ -155,7 +159,7 @@
                     (p "Created new post: " ,(assoc-ref form-data "title"))
                     (pre ,(assoc-ref form-data "body"))))))
 
-(define (show-post post)
+(define (show-post post comments?)
   `((h2 (@ (class "storytitle"))
         ,(post-link post))
     (div (@ (class "post"))
@@ -165,7 +169,10 @@
                                       " | ")
              ")")
          (div (@ (class "storycontent"))
-              ,(post-sxml-content post)))))
+              ,(post-sxml-content post)))
+    ,(if comments?
+         (post-sxml-comments post)
+         (post-sxml-n-comments post))))
 
 ;;                     (a (@ (href ,new-url)) ,new-url)
 
@@ -186,11 +193,80 @@
              (pk post)
              (rcons* request
                      'title (assq-ref post 'title)
-                     'body (show-post post)))))
+                     'body (show-post post #t)))))
      (else
       (page-not-found request index)))))
 
-(define page-archives not-implemented)
+(define/kwargs (date-increment date (day 0) (month 0) (year 0))
+  (make-date (date-nanosecond date) (date-second date)
+             (date-minute date) (date-minute date)
+             (+ (date-day date) day) (+ (date-month date) month)
+             (+ (date-year date) year) (date-zone-offset date)))
+
+(define (date-comparator date comp)
+  (let ((this (time-second (date->time-utc date))))
+    (lambda (that)
+      (comp that this))))
+
+(define (date-before? date)
+  (date-comparator date <))
+
+(define (date-after? date)
+  (date-comparator date >))
+
+(define (compose1 proc . procs)
+  (if (null? procs)
+      proc
+      (let ((other (apply compose1 procs)))
+        (lambda (x)
+          (proc (other x))))))
+
+;; fixme exception handling for input
+(define (page-archives request index year month day)
+  (let ((year (and=> year string->number))
+        (month (and=> month string->number))
+        (day (and=> day string->number)))
+    (let ((start (make-date 0 0 0 0 (or day 1) (or month 1) (or year 1980) 0)))
+      (define too-early?
+        (compose1 (date-before? start) post-timestamp))
+      (define early-enough?
+        (if year
+            (compose1 (date-before?
+                       (cond (day (date-increment start #:day 1))
+                             (month (date-increment start #:month 1))
+                             (else (date-increment start #:year 1))))
+                      post-timestamp)
+            (lambda (post) #t)))
+      (define (make-date-header post)
+        (lambda (x) #f))
+    
+      (let lp ((posts (assq-ref index 'posts)))
+        (pk 'foo (or (null? posts) (car posts)))
+        (cond ((or (null? posts) (too-early? (car posts)))
+               (rcons* request
+                       'title "no posts found"
+                       'body `((h1 "No posts found")
+                               (p "No posts were found in the specified period."))))
+              ((early-enough? (car posts))
+               (let lp ((posts posts) (new-header (make-date-header #t)) (out '()))
+                 (cond
+                  ((or (null? posts) (too-early? (car posts)))
+                   (rcons* request
+                           'title "archives"
+                           'body (reverse out)))
+                  ((new-header (car posts))
+                   => (lambda (sxml)
+                        (lp (cdr posts) (make-date-header (car posts))
+                            (cons (post-link (car posts)) (append sxml out)))))
+                  (else
+                   (lp (cdr posts) new-header (cons `(p ,(post-link (car posts))) out))))))
+              (else (lp (cdr posts))))))))
+
+(define (page-show-tags request index)
+  (not-implemented request index))
+
+(define (page-show-tag request index tag)
+  (not-implemented request index))
 
 (define (page-debug request index)
   (rcons* request

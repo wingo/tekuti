@@ -135,9 +135,11 @@
                (list name object type mode)))
 
 (define (git-ls-subdirs treeish path)
-  (match-lines (git "ls-tree" treeish (or path "."))
-               "^(.+) tree (.+)\t(.+)$" (_ mode object name)
-               (cons name object)))
+  (or (false-if-git-error
+       (match-lines (git "ls-tree" treeish (or path "."))
+                    "^(.+) tree (.+)\t(.+)$" (_ mode object name)
+                    (cons name object)))
+      '()))
 
 (define (parse-metadata treeish specs)
   (filter

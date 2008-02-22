@@ -97,6 +97,8 @@
    ((GET) page-index)
    ((GET archives year? month? day?) page-archives)
    ((GET archives year! month! day! post!) page-show-post)
+   ((GET tags) page-show-tags)
+   ((GET tags tag!) page-show-tag)
    ((GET debug) page-debug)
    ((POST search) page-search)
    (else page-not-found)))

@@ -28,14 +28,19 @@
   #:use-module (srfi srfi-1)
   #:use-module (match-bind)
   #:use-module (tekuti util)
+  #:use-module (tekuti url)
   #:use-module (tekuti comment)
+  #:use-module (tekuti config)
   #:use-module (tekuti git)
   #:use-module (tekuti filters)
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-19)
   #:export (reindex-posts post-from-tree post-from-key post-categories
+                          post-timestamp
             post-sxml-content post-raw-content all-published-posts
-            post-readable-date post-category-links))
+            post-readable-date post-category-links post-sxml-n-comments
+            post-sxml-comments))
+
   
 ;; introducing new assumption: post urls like yyyy/dd/mm/post; post dirnames the urlencoded post
 
@@ -54,14 +59,14 @@
     (categories . ,(lambda (v) (map string-trim-both (string-split v #\,))))
     (title . ,identity)))
 
-(define-memoized (post-from-tree encoded-name sha1)
+(define (post-from-tree encoded-name sha1)
   (acons 'key encoded-name
-         (acons 'content-ref (string-append sha1 ":content")
+         (acons 'sha1 sha1
                 (parse-metadata (string-append sha1 ":metadata")
                                 *post-spec*))))
 
 (define (post-raw-content post)
-  (git "show" (assq-ref post 'content-ref)))
+  (git "show" (string-append (assq-ref post 'sha1) ":content")))
 
 (define (post-sxml-content post)
   (let ((format (or (assq-ref post 'format) 'wordpress)))
@@ -76,7 +81,11 @@
     (date->string date "~e ~B ~Y ~l:~M ~p")))
 
 (define (post-category-links post)
-  (post-categories post))
+  (map (lambda (cat)
+         `(a (@ (href ,(string-append *public-url-base* "tags/"
+                                      (url:encode cat))))
+             ,cat))
+       (post-categories post)))
 
 (define (post-from-key master key)
   (let ((pairs (git-ls-subdirs master key)))
@@ -92,15 +101,59 @@
   (dsu-sort
    (filter post-published? (all-posts master))
    post-timestamp
-   <))
+   >))
 
-(define (post-comments sha1)
+(define (post-comments post)
   (dsu-sort
    (map (lambda (pair)
           (comment-from-tree (car pair) (cdr pair)))
-        (git-ls-subdirs sha1 "comments/"))
+        (git-ls-subdirs (assq-ref post 'sha1) "comments/"))
    comment-timestamp
    <))
+
+(define (post-sxml-comments post)
+  (let ((comments (post-comments post))
+        (comment-status (assq-ref post 'comment_status)))
+    (define (n-comments-header)
+      (and (or (not (null? comments)) (equal? comment-status "open"))
+           `(h3 (@ (id "comments"))
+                ,(let ((len (length comments)))
+                   (case len
+                     ((0) "No responses")
+                     ((1) "One response")
+                     (else (format #f "~d responses" len)))))))
+    (define (show-comment comment)
+      `(li (@ (class "alt") (id ,(assq-ref comment 'encoded-name)))
+           (cite ,(let ((url (assq-ref comment 'author_url))
+                        (name (assq-ref comment 'author)))
+                    (if url
+                        `(a (@ (href ,url) (rel "external nofollow")) ,name)
+                        name)))
+           " says:" (br)
+           (small (@ (class "commentmetadata"))
+                  (a (@ (href ,(string-append
+                                "#" (assq-ref comment 'encoded-name))))
+                     ,(comment-readable-date comment)))
+           ,(comment-sxml-content comment)))
+    `(div
+      ,@(or (and=> (n-comments-header) list) '())
+      ,@(let ((l (map show-comment comments)))
+          (if (null? l) l
+              `((ol (@ (class "commentlist")) ,@l))))
+      ,(if (equal? comment-status "closed")
+           `(p (@ (id "nocomments")) "Comments are closed.")
+           '(div (h3 "Leave a Reply")
+                 "...")))))
+
+(define (post-n-comments post)
+  (length (git-ls-subdirs (assq-ref post 'sha1) "comments/")))
+
+(define (post-sxml-n-comments post)
+  `(div (@ (class "feedback"))
+        (a (@ (href ,(string-append *public-url-base* "/archives/"
+                                    (assq-ref post 'encoded-name)
+                                    "#comments")))
+           "(" ,(post-n-comments post) ")")))
 
 (define (reindex-posts index)
   (all-published-posts (assq-ref index 'master)))

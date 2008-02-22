@@ -28,8 +28,10 @@
 (define-module (tekuti comment)
   #:use-module (tekuti git)
   #:use-module (tekuti util)
+  #:use-module (tekuti filters)
   #:use-module (srfi srfi-1)
-  #:export (comment-from-tree build-comment-skeleton))
+  #:use-module (srfi srfi-19)
+  #:export (comment-from-tree comment-sxml-content comment-timestamp build-comment-skeleton comment-readable-date))
 
 (use-modules (ice-9 rdelim)
              (ice-9 popen)
@@ -43,7 +45,24 @@
   `((timestamp . ,string->number)))
 (define (comment-from-tree encoded-name sha1)
   (acons 'encoded-name encoded-name
-         (parse-metadata (string-append sha1 ":" "metadata") *comment-spec*)))
+         (acons 'sha1 sha1
+                (parse-metadata (string-append sha1 ":" "metadata")
+                                *comment-spec*))))
+
+(define (comment-readable-date comment)
+  (let ((date (time-utc->date
+               (make-time time-utc 0 (assq-ref comment 'timestamp)))))
+    (date->string date "~e ~B ~Y ~l:~M ~p")))
+
+(define (comment-raw-content comment)
+  (git "show" (string-append (assq-ref comment 'sha1) ":content")))
+
+(define (comment-sxml-content comment)
+  (let ((format (or (assq-ref comment 'format) 'wordpress)))
+    ((case format
+       ((wordpress) wordpress->sxml)
+       (else (lambda (text) `(pre ,text))))
+     (comment-raw-content comment))))
 
 (define (comment-timestamp comment-alist)
   (or (assq-ref comment-alist 'timestamp) #f))
