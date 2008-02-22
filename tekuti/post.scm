@@ -57,7 +57,8 @@
 (define-memoized (post-from-tree encoded-name sha1)
   (acons 'key encoded-name
          (acons 'content-ref (string-append sha1 ":content")
-                (parse-metadata (string-append sha1 ":metadata")))))
+                (parse-metadata (string-append sha1 ":metadata")
+                                *post-spec*))))
 
 (define (post-raw-content post)
   (git "show" (assq-ref post 'content-ref)))

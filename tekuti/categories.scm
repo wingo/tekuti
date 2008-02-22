@@ -33,11 +33,11 @@
 (define (compute-categories posts)
   (let ((hash (make-hash-table)))
     (for-each
-     (lambda (post-pair)
+     (lambda (post)
        (for-each
         (lambda (cat)
-          (hash-push! hash cat post-pair))
-        (post-categories (cdr post-pair))))
+          (hash-push! hash cat (assq-ref post 'key)))
+        (post-categories post)))
      posts)
     hash))
 

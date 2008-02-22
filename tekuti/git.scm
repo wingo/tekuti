@@ -38,7 +38,9 @@
 
             git git* ensure-git-repo git-ls-tree git-ls-subdirs
             parse-metadata parse-commit commit-utc-timestamp
-            commit-parents make-tree git-rev-parse))
+            commit-parents make-tree git-rev-parse
+
+            write-indices read-indices))
 
 (define-condition-type &git-condition &condition git-condition?
   (argv git-condition-argv)
@@ -137,8 +139,19 @@
                "^(.+) tree (.+)\t(.+)$" (_ mode object name)
                (cons name object)))
 
-(define (parse-metadata treeish)
-  (with-input-from-string (git "show" treeish) read))
+(define (parse-metadata treeish specs)
+  (filter
+   identity
+   (match-lines (git "show" treeish)
+                "^([^: ]+): +(.*)$" (_ k v)
+                (let* ((k (string->symbol k))
+                       (parse (assq-ref specs k)))
+                  (if parse
+                      (catch 'parse-error
+                             (lambda ()
+                               (cons k (parse v)))
+                             (lambda args #f))
+                      (cons k v))))))
 
 (define (parse-commit commit)
   (let ((text (git "cat-file" "commit" commit)))
@@ -156,6 +169,8 @@
    (_ who ts tz)
    (let ((ts (string->number ts)) (tz (string->number tz)))
      (- ts (* (+ (* (quotient tz 100) 60) (remainder tz 100)) 60)))))
+
+;; fixme: do to commits what i already did to posts
 
 (define (commit-parents commit)
   (map cdr
@@ -175,3 +190,62 @@
 
 (define (git-rev-parse rev)
   (string-trim-both (git "rev-parse" rev)))
+
+(define (create-blob contents)
+  (string-trim-both
+   (git* '("hash-object" "-w" "--stdin") #:input contents)))
+
+;; order: name object type mode
+(define (make-tree-full alist)
+  (string-trim-both
+   (git* '("mktree")
+         #:input (string-join
+                  (map (lambda (l)
+                         (apply format #f "~a ~a ~a\t~a"
+                                (reverse l)))
+                       alist)
+                  "\n" 'suffix))))
+
+;; fixme: map-pairs
+
+(define (assoc-list-ref alist key n default)
+  (let ((l (assoc key alist)))
+    (if l (list-ref l n) default)))
+
+(define (write-indices indices oldref specs)
+  (let* ((master (assq-ref indices 'master))
+         (ts (commit-utc-timestamp master))
+         (env (list "GIT_COMMMITTER=tekuti"
+                    (format #f "GIT_COMMITTER_DATE=~a +0100" ts)
+                    (format #f "GIT_AUTHOR_DATE=~a +0100" ts)))
+         (tree (make-tree-full
+                (map (lambda (pair)
+                       (list (symbol->string (car pair))
+                             (create-blob
+                              (with-output-to-string
+                                (lambda ()
+                                  ((assoc-list-ref specs (car pair) 2 write)
+                                   (cdr pair)))))
+                             "blob" "100644"))
+                     indices))))
+    (let ((new (string-trim-both
+                (git* (cons* "commit-tree" tree
+                             (if oldref (list "-p" oldref) '()))
+                      #:input "reindex\n" #:env env))))
+      (or (false-if-git-error
+           (git "update-ref" "refs/heads/index" new (or oldref "")))
+          (warn "could not update indexes ref"))
+      new)))
+
+(define (read-indices specs)
+  (and=> (false-if-git-error (git-rev-parse "refs/heads/index"))
+         (lambda (ref)
+           (cons ref
+                 (map (lambda (dent)
+                        (cons (string->symbol (car dent))
+                              (with-input-from-string 
+                                  (git "show" (cadr dent))
+                                (assoc-list-ref specs (string->symbol (car dent)) 3 read))))
+                      (git-ls-tree (assq-ref (parse-commit ref) 'tree)
+                                    #f))))))
+

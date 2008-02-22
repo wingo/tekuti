@@ -31,7 +31,6 @@ exec guile $GUILE_FLAGS -l $0 -e main -- "$@"
 ;; (turn-on-debugging)
 (use-modules (tekuti git) (tekuti post))
 
-;; order: name object type mode
 (define (make-tree-full alist)
   (string-trim-both
    (git* '("mktree")

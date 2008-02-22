@@ -119,9 +119,20 @@
         
         val))))
 
+(define (write-hash h)
+  (write (hash-fold acons '() h)))
+
+;; fixme: doesn't share structure with posts index
+(define (read-hash)
+  (let ((h (make-hash-table)))
+    (for-each (lambda (pair)
+                (hash-set! h (car pair) (cdr pair)))
+              (read))
+    h))
+
 (define indices                          
-  `((posts . ,reindex-posts)
-    (categories . ,reindex-categories)))
+  `((posts ,reindex-posts ,write ,read)
+    (categories ,reindex-categories ,write-hash ,read-hash)))
 
 (use-modules (statprof))
 (define (reindex master)
@@ -131,34 +142,30 @@
       (lambda ()
         (with-statprof #:hz 100
                        (fold (lambda (pair index)
-                               (acons (car pair) ((cdr pair) index)
+                               (acons (car pair) ((cadr pair) index)
                                       index))
                              (acons 'master master '())
                              indices)))))))
 
-(define (maybe-reindex old-master old-index)
+(define (maybe-reindex old-index)
   (let ((master (git-rev-parse "master")))
-    (values
-     master 
-     (if (equal? master old-master)
-         old-index
-         (reindex master)))))
+    (if (and old-index (equal? (assq-ref (cdr old-index) 'master) master))
+        old-index
+        (let ((new-index (reindex master)))
+          (cons (write-indices new-index (and=> old-index car) indices)
+                new-index)))))
 
-(define (inner-loop socket cookie index)
+(define (inner-loop socket index)
   (let* ((pair (accept socket))
          (fd (car pair))
-         (sockaddr (cdr pair)))
-    (receive
-     (new-cookie new-index) (maybe-reindex cookie index)
-     (connection-received (car pair) (cdr pair) new-index)
-     (inner-loop socket new-cookie new-index))))
+         (sockaddr (cdr pair))
+         (new-index (maybe-reindex index)))
+    (connection-received (car pair) (cdr pair) (cdr new-index))
+    (inner-loop socket new-index)))
 
 (define (event-loop)
   (with-socket
    (lambda (socket)
-     (format #t "running initial index\n")
-     (receive
-      (master index) (maybe-reindex #f #f)
-      (format #t "entering inner loop\n")
-      (inner-loop socket master index)))))
+     (format #t "entering inner loop\n")
+     (inner-loop socket (read-indices indices)))))
 
