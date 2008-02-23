@@ -60,9 +60,6 @@
 (define (make-post-key . parts)
   (url:encode (format #f "~{~a~^/~}" (map url:encode parts))))
 
-(define (show-post slug index)
-  `(sxml . (p "hello" ,slug)))
-
 (define (not-implemented request . args)
   (rcons* request
           'status 500
@@ -89,20 +86,37 @@
   `(div (@ (id "menu"))
         (ul ,@body)))
 
+(define (with-authentication request thunk)
+  (let ((headers (rref request 'headers '())))
+    (define (authenticated?)
+      (let ((b64 (assoc-ref headers "Authorization")))
+        (pk b64) ;; FIXME, decode
+        ))
+    (if (authenticated?)
+        (thunk)
+        (rcons* (rpush 'output-headers
+                      '("WWW-Authenticate" . "Basic realm=\"Tekuti\"")
+                      request)
+                'status 401
+                'body `((p "Authentication required, yo"))))))
+
 (define (page-admin request index)
-  ;; here we need to be giving a dashboard view instead of this
-  (define (post-links n)
-    (mapn (lambda (post)
-            `(li ,(admin-post-link post)))
-          (assq-ref index 'posts)
-          n))
-  (rcons* request
-          'body `(,(sidebar-ul `((li (h2 ,(relurl "admin/posts" "posts"))
-                                     (ul ,@(post-links 10)))
-                                 (li (h2 "recent comments")
-                                     (p "ain't got none"))))
-                  (h2 "new post")
-                  ,(post-editing-form #f))))
+  (with-authentication
+   request
+   (lambda ()
+     ;; here we need to be giving a dashboard view instead of this
+     (define (post-links n)
+       (mapn (lambda (post)
+               `(li ,(admin-post-link post)))
+             (assq-ref index 'posts)
+             n))
+     (rcons* request
+             'body `(,(sidebar-ul `((li (h2 ,(relurl "admin/posts" "posts"))
+                                        (ul ,@(post-links 10)))
+                                    (li (h2 "recent comments")
+                                        (p "ain't got none"))))
+                     (h2 "new post")
+                     ,(post-editing-form #f))))))
 
 (define (admin-post-link post)
   (relurl (string-append "admin/posts/"
@@ -114,22 +128,27 @@
           (assq-ref post 'title)))
 
 (define (page-admin-posts request index)
-  (define (post-headers)
-    (map (lambda (post)
-           ;; double-encoding is a hack to trick apache
-           `(h3 ,(relurl (string-append "admin/posts/" (url:encode (assq-ref post 'key)))
-                         (assq-ref post 'title))))
-         (assq-ref index 'posts)))
-  (rcons* request
-          'body `((h1 "all your posts are belong to tekuti")
-                  ,@(post-headers))))
+  (with-authentication
+   request
+   (lambda ()
+     (define (post-headers)
+       (map (lambda (post)
+              ;; double-encoding is a hack to trick apache
+              `(h3 ,(relurl (string-append "admin/posts/" (url:encode (assq-ref post 'key)))
+                            (assq-ref post 'title))))
+            (assq-ref index 'posts)))
+     (rcons* request
+             'body `((h1 "all your posts are belong to tekuti")
+                     ,@(post-headers))))))
 
 (define (page-admin-post request index key)
-  (let ((post (post-from-key (assq-ref index 'master) key)))
-    (pk 'foo post)
-    (rcons* request
-          'body `((h1 ,(assq-ref post 'title))
-                  ,(post-editing-form post)))))
+  (with-authentication
+   request
+   (lambda ()
+     (let ((post (post-from-key (assq-ref index 'master) key)))
+       (rcons* request
+               'body `((h1 ,(assq-ref post 'title))
+                       ,(post-editing-form post)))))))
 
 (define (decode-form-data request)
   (let-request request (headers post-data)
@@ -150,14 +169,17 @@
             (error "bad content-type" content-type)))))))
 
 (define (page-admin-new-post request index)
-  (let ((form-data (decode-form-data request)))
-    (rcons* request
-            'status 201         ; created
-            'output-headers (acons "Location" *public-url-base*
-                                   (rref request 'output-headers '()))
-            'body `((h1 "Created")
-                    (p "Created new post: " ,(assoc-ref form-data "title"))
-                    (pre ,(assoc-ref form-data "body"))))))
+  (with-authentication
+   request
+   (lambda ()
+     (let ((form-data (decode-form-data request)))
+       (rcons* request
+               'status 201              ; created
+               'output-headers (acons "Location" *public-url-base*
+                                      (rref request 'output-headers '()))
+               'body `((h1 "Created")
+                       (p "Created new post: " ,(assoc-ref form-data "title"))
+                       (pre ,(assoc-ref form-data "body"))))))))
 
 (define (show-post post comments?)
   `((h2 (@ (class "storytitle"))
@@ -169,25 +191,72 @@
                                       " | ")
              ")")
          (div (@ (class "storycontent"))
-              ,(post-sxml-content post)))
-    ,(if comments?
-         (post-sxml-comments post)
-         (post-sxml-n-comments post))))
+              ,(post-sxml-content post))
+         ,@(if comments? '()
+               (list (post-sxml-n-comments post))))
+    ,@(if comments?
+          (list (post-sxml-comments post))
+          '())))
 
 ;;                     (a (@ (href ,new-url)) ,new-url)
 
 (define (page-admin-modify-post request index key)
-  (not-implemented request index))
+  (with-authentication
+   request
+   (lambda ()
+     (not-implemented request index))))
 (define page-new-comment not-implemented)
 (define page-delete-comment not-implemented)
 (define page-delete-post not-implemented)
 
+(define (tag-cloud index)
+  (define (determine-sizes counts)
+    (let ((maxcount (apply max counts)))
+      (map (lambda (x)
+             (floor (+ 80 (* 120 (/ x maxcount)))))
+           counts)))
+  (let* ((cats (hash-fold (lambda (k v seed) (acons k (length v) seed))
+                          '() (assq-ref index 'categories)))
+         (top-20 (dsu-sort (take-max (dsu-sort cats cdr >) 20)
+                           car string<?)))
+    `(ul (li (@ (style "line-height: 150%"))
+             ,@(list-intersperse
+                (map (lambda (name size)
+                       `(a (@ (href ,(string-append
+                                      *public-url-base* "tags/"
+                                      (url:encode name)))
+                              (rel "tag")
+                              (style ,(format #f "font-size: ~d%" size)))
+                           ,name))
+                     (map car top-20)
+                     (determine-sizes (map cdr top-20)))
+                " "))
+         )))
+
+(define (main-sidebar request index)
+  (sidebar-ul
+   `((li (h2 "orbit")
+         (ul
+          ,@(map (lambda (pair)
+                   `(li (a (@ (href ,(car pair))) ,(cdr pair))))
+                 '(("http://advogato.org/recentlog.html?thresh=3" . "advogato")
+                   ("http://ambient.2y.net/" . "ambient")
+                   ("http://planet.gnome.org/" . "gnome")
+                   ("http://gstreamer.freedesktop.org/planet/" . "gstreamer")
+                   ("http://planet.lisp.org/" . "lisp")))))
+     (li (h2 "tags "
+             (a (@ (href ,(string-append *public-url-base* "tags/")))
+                ">>"))
+         ,(tag-cloud index)))))
+
+
 (define (page-index request index)
   (rcons* request
           'title "my bloggidy blog"
-          'body (map (lambda (post)
-                       (show-post post #f))
-                     (take-max (assq-ref index 'posts) 10))))
+          'body `(,(main-sidebar request index)
+                  ,@(map (lambda (post)
+                           (show-post post #f))
+                         (take-max (assq-ref index 'posts) 10)))))
 
 (define (page-show-post request index year month day post)
   (let ((slug (make-post-key year month day post)))

@@ -38,6 +38,7 @@
 (define *status-names*
   '((200 . "OK")
     (201 . "Created")
+    (401 . "Unauthorized")
     (404 . "Not Found")
     (500 . "Internal Server Error")))
 
