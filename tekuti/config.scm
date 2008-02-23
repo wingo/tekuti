@@ -27,7 +27,7 @@
 (define-module (tekuti config)
   #:use-module (tekuti util)
   #:export (*host* *port* *backlog* *git-dir* *git* *public-url-base*
-            *private-url-base* *debug*))
+            *private-url-base* *debug* *admin-user* *admin-pass*))
 
 (define *host* "127.0.0.1")
 (define *port* 8081)
@@ -37,3 +37,5 @@
 (define *public-url-base* "/blog/")
 (define *private-url-base* "/blog/")
 (define *debug* #t)
+(define *admin-user* "admin")
+(define *admin-pass* "totingiini")

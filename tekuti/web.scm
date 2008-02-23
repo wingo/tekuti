@@ -88,7 +88,6 @@
    ((GET admin posts) page-admin-posts)
    ((GET admin posts post-key!) page-admin-post)
    ((POST admin new-post) page-admin-new-post)
-   ((POST admin new-comment post-key!) page-admin-new-comment)
    ;; would be fine to have e.g. (DELETE admin posts posts-key!), but
    ;; web browsers don't handle that
    ((POST admin modify-post post-key!) page-admin-modify-post)
@@ -98,6 +97,7 @@
    ((GET) page-index)
    ((GET archives year? month? day?) page-archives)
    ((GET archives year! month! day! post!) page-show-post)
+   ((POST archives year! month! day! post!) page-new-comment)
    ((GET tags) page-show-tags)
    ((GET tags tag!) page-show-tag)
    ((GET debug) page-debug)

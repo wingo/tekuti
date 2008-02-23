@@ -29,6 +29,7 @@
   #:use-module (tekuti util)
   #:use-module (tekuti git)
   #:use-module (tekuti post)
+  #:use-module (tekuti comment)
   #:use-module (tekuti url)
   #:use-module (tekuti request)
   #:use-module (srfi srfi-34)
@@ -38,12 +39,12 @@
             page-admin-posts
             page-admin-post
             page-admin-new-post
-            page-admin-new-comment
             page-admin-modify-post 
             page-admin-delete-comment 
             page-admin-delete-post 
             page-index 
             page-show-post 
+            page-new-comment
             page-archives 
             page-show-tags
             page-show-tag
@@ -87,18 +88,13 @@
         (ul ,@body)))
 
 (define (with-authentication request thunk)
-  (let ((headers (rref request 'headers '())))
-    (define (authenticated?)
-      (let ((b64 (assoc-ref headers "Authorization")))
-        (pk b64) ;; FIXME, decode
-        ))
-    (if (authenticated?)
-        (thunk)
-        (rcons* (rpush 'output-headers
-                      '("WWW-Authenticate" . "Basic realm=\"Tekuti\"")
-                      request)
-                'status 401
-                'body `((p "Authentication required, yo"))))))
+  (if (request-authenticated? request)
+      (thunk)
+      (rcons* (rpush 'output-headers
+                     '("WWW-Authenticate" . "Basic realm=\"Tekuti\"")
+                     request)
+              'status 401
+              'body `((p "Authentication required, yo")))))
 
 (define (page-admin request index)
   (with-authentication
@@ -150,29 +146,11 @@
                'body `((h1 ,(assq-ref post 'title))
                        ,(post-editing-form post)))))))
 
-(define (decode-form-data request)
-  (let-request request (headers post-data)
-    (if (string-null? post-data)
-        '()
-        (let ((content-type (assoc-ref headers "content-type")))
-          (cond
-           ((equal? content-type "application/x-www-form-urlencoded")
-            (map
-             (lambda (piece)
-               (let ((equals (string-index piece #\=)))
-                 (if equals
-                     (cons (url:decode (substring piece 0 equals))
-                           (url:decode (substring piece (1+ equals))))
-                     (cons (url:decode piece) ""))))
-             (string-split post-data #\&)))
-           (else
-            (error "bad content-type" content-type)))))))
-
 (define (page-admin-new-post request index)
   (with-authentication
    request
    (lambda ()
-     (let ((form-data (decode-form-data request)))
+     (let ((form-data (request-form-data request)))
        (rcons* request
                'status 201              ; created
                'output-headers (acons "Location" *public-url-base*
@@ -205,7 +183,6 @@
    request
    (lambda ()
      (not-implemented request index))))
-(define page-new-comment not-implemented)
 (define page-delete-comment not-implemented)
 (define page-delete-post not-implemented)
 
@@ -265,10 +242,28 @@
        (git-rev-parse (string-append (assq-ref index 'master) ":" slug)))
       => (lambda (tree)
            (let ((post (post-from-tree slug tree)))
-             (pk post)
              (rcons* request
                      'title (assq-ref post 'title)
                      'body (show-post post #t)))))
+     (else
+      (page-not-found request index)))))
+
+(define (page-new-comment request index year month day post)
+  (let ((slug (make-post-key year month day post))
+        (data (request-form-data request)))
+    (cond
+     ((false-if-git-error
+       (git-rev-parse (string-append (assq-ref index 'master) ":" slug)))
+      => (lambda (tree)
+           (cond
+            ((bad-new-comment-post? data)
+             => (lambda (reason)
+                  (pk reason)
+                  (rcons* request
+                          'body `((p "Bad post data: " ,reason)))))
+            (else
+             (rcons* request
+                     'body `((p "hey hey hey like fat albert")))))))
      (else
       (page-not-found request index)))))
 

@@ -38,7 +38,8 @@
 
             git git* ensure-git-repo git-ls-tree git-ls-subdirs
             parse-metadata parse-commit commit-utc-timestamp
-            commit-parents make-tree git-rev-parse
+            commit-parents make-tree git-rev-parse make-tree-full
+            create-blob
 
             write-indices read-indices))
 
@@ -129,10 +130,12 @@
         (chdir d))))
 
 (define (git-ls-tree treeish path)
-  (match-lines (git "ls-tree" treeish (or path "."))
-               "^(.+) (.+) (.+)\t(.+)$" (_ mode type object name)
-               ;; reversed for assoc
-               (list name object type mode)))
+  (or (false-if-git-error
+       (match-lines (git "ls-tree" treeish (or path "."))
+                    "^(.+) (.+) (.+)\t(.+)$" (_ mode type object name)
+                    ;; reversed for assoc
+                    (list name object type mode)))
+      '()))
 
 (define (git-ls-subdirs treeish path)
   (or (false-if-git-error

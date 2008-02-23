@@ -106,10 +106,31 @@
 (define (post-comments post)
   (dsu-sort
    (map (lambda (pair)
-          (comment-from-tree (car pair) (cdr pair)))
-        (git-ls-subdirs (assq-ref post 'sha1) "comments/"))
+          (comment-from-object (car pair) (cadr pair)))
+        (git-ls-tree (string-append (assq-ref post 'sha1) ":comments") #f))
    comment-timestamp
    <))
+
+(define (comment-form post author email url comment)
+  `(form
+    (@ (action ,(string-append *public-url-base* "archives/"
+                               (url:decode (assq-ref post 'key))))
+       (method "POST"))
+    (p (input (@ (type "text") (name "author") (value ,author)
+                 (size "22") (tabindex "1")))
+       " " (label (@ (for "author")) (small "Name")))
+    (p (input (@ (type "text") (name "email") (value ,email)
+                 (size "22") (tabindex "2")))
+       " " (label (@ (for "email")) (small "Mail (will not be published)")))
+    (p (input (@ (type "text") (name "url") (value ,url)
+                 (size "22") (tabindex "3")))
+       " " (label (@ (for "url")) (small "Website")))
+    ;(p (small "allowed tags: "))
+    (p (textarea (@ (name "comment") (id "comment") (cols "100%")
+                    (rows "10") (tabindex "4"))
+                 ,comment))
+    (p (input (@ (name "submit") (type "submit") (id "submit") (tabindex "5")
+                 (value "Submit Comment"))))))
 
 (define (post-sxml-comments post)
   (let ((comments (post-comments post))
@@ -123,7 +144,7 @@
                      ((1) "One response")
                      (else (format #f "~d responses" len)))))))
     (define (show-comment comment)
-      `(li (@ (class "alt") (id ,(assq-ref comment 'encoded-name)))
+      `(li (@ (class "alt") (id ,(assq-ref comment 'key)))
            (cite ,(let ((url (assq-ref comment 'author_url))
                         (name (assq-ref comment 'author)))
                     (if url
@@ -131,8 +152,7 @@
                         name)))
            " says:" (br)
            (small (@ (class "commentmetadata"))
-                  (a (@ (href ,(string-append
-                                "#" (assq-ref comment 'encoded-name))))
+                  (a (@ (href ,(string-append "#" (assq-ref comment 'key))))
                      ,(comment-readable-date comment)))
            ,(comment-sxml-content comment)))
     `(div
@@ -142,8 +162,8 @@
               `((ol (@ (class "commentlist")) ,@l))))
       ,(if (equal? comment-status "closed")
            `(p (@ (id "nocomments")) "Comments are closed.")
-           '(div (h3 "Leave a Reply")
-                 "...")))))
+           `(div (h3 "Leave a Reply")
+                 ,(comment-form post "" "" "" ""))))))
 
 (define (post-n-comments post)
   (length (git-ls-subdirs (assq-ref post 'sha1) "comments/")))

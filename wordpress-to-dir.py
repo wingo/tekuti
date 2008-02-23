@@ -63,9 +63,8 @@ def write_comment(comment, dir):
         out += 'timestamp: %s\n' % int(time.mktime(date.timetuple()))
         return out
 
-    d = make_dir(dir + str(comment['id']))
-    write_file(d + 'content', comment['content'])
-    write_file(d + 'metadata', make_metadata())
+    write_file(dir + str(comment['id']),
+               make_metadata() + '\n' + comment['content'])
 
 def make_post_key(post):
     d = post['date']
@@ -87,9 +86,10 @@ def write_post(post, categories, comments):
     write_file(d + 'content', post['content'])
     write_file(d + 'content-filtered', post['content_filtered'])
     write_file(d + 'metadata', make_metadata())
-    c = make_dir(d + 'comments')
-    for comment in comments:
-        write_comment(comment, c)
+    if comments:
+        c = make_dir(d + 'comments')
+        for comment in comments:
+            write_comment(comment, c)
 
 def main(args):
     global cxn

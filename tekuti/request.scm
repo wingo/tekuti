@@ -27,11 +27,14 @@
 (define-module (tekuti request)
   #:use-module ((srfi srfi-1) #:select (find-tail fold))
   #:use-module (scheme kwargs)
+  #:use-module (match-bind)
   #:use-module (tekuti util)
   #:use-module (tekuti url)
   #:use-module (tekuti config)
+  #:use-module (tekuti base64)
   #:export (make-request rcons rcons* rpush rpush* rref let-request
-            request-path-case))
+            request-path-case request-authenticated?
+            request-form-data))
 
 (define (header-ref headers key default)
   (let ((pair (assoc key headers)))
@@ -53,6 +56,24 @@
                    (url:path-join (rref r 'path '()))))
     (method . ,(lambda (r)
                  (header-ref (rref r 'headers '()) "method" "GET")))))
+
+(define (request-form-data request)
+  (let-request request (headers post-data)
+    (if (string-null? post-data)
+        '()
+        (let ((content-type (assoc-ref headers "content-type")))
+          (cond
+           ((equal? content-type "application/x-www-form-urlencoded")
+            (map
+             (lambda (piece)
+               (let ((equals (string-index piece #\=)))
+                 (if equals
+                     (cons (url:decode (substring piece 0 equals))
+                           (url:decode (substring piece (1+ equals))))
+                     (cons (url:decode piece) ""))))
+             (string-split post-data #\&)))
+           (else
+            (error "bad content-type" content-type)))))))
 
 (define (make-request . keys-and-values)
   (fold (lambda (pair r)
@@ -85,6 +106,19 @@
      (pair (cdr pair))
      (default-proc (default-proc request k))
      (else default))))
+
+;; danger here, regarding the optional alternate clauses...
+(define (request-authenticated? request)
+  (let ((headers (rref request 'headers '())))
+    (let ((auth (assoc-ref headers "Authorization")))
+      (and auth
+           (match-bind "^Basic ([A-Za-z0-9+/=]*)$" auth (_ b64)
+                       (match-bind "^([^:]*):(.*)$"
+                                   (base64-decode b64) (_ user pass)
+                                   (and (equal? user *admin-user*)
+                                        (equal? pass *admin-pass*))
+                                   #f)
+                       #f)))))
 
 (define-macro (let-request request bindings . body)
   (let ((request-var (gensym)))
