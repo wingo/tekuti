@@ -38,6 +38,7 @@
 (define *status-names*
   '((200 . "OK")
     (201 . "Created")
+    (304 . "Not Modified")
     (401 . "Unauthorized")
     (404 . "Not Found")
     (500 . "Internal Server Error")))
@@ -51,6 +52,7 @@
    "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\" "
    "\"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\">\n"))
 
+;; what the hell is this
 (define (request-output-headers request)
   (let-request request ((output-headers '())
                         (status 200)
@@ -73,9 +75,10 @@
 (define (finalize request)
   ;; update output headers
   ;; templatize body
-  (rpush* (rcons* request
-                  'sxml (templatize request)
-                  'doctype xhtml-doctype)
+  (rpush* (if (assq 'sxml request)
+              request
+              (rcons 'sxml (templatize request)
+                     request))
           'output-headers
           (cons "Status" (status->string (rref request 'status 200)))
           'output-headers
@@ -98,6 +101,9 @@
    ((GET archives year? month? day?) page-archives)
    ((GET archives year! month! day! post!) page-show-post)
    ((POST archives year! month! day! post!) page-new-comment)
+   ((GET feed) page-feed-rss2)
+   ((GET feed rss2) page-feed-rss2)
+   ((GET feed atom) page-feed-atom)
    ((GET tags) page-show-tags)
    ((GET tags tag!) page-show-tag)
    ((GET debug) page-debug)
@@ -106,4 +112,4 @@
 
 (define (handle-request request index)
   (let ((handler (choose-handler request)))
-    (pk (finalize (handler request index)))))
+    (finalize (handler (rcons 'doctype xhtml-doctype request) index))))

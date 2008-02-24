@@ -69,8 +69,20 @@
   (display "end\n" port))
 
 (define (write-body request socket)
-  (display (rref request 'doctype "") socket)
-  (sxml->xml (rref request 'sxml '()) socket))
+  (let ((sxml (rref request 'sxml #f)))
+    (if sxml
+        (begin (display (rref request 'doctype "") socket)
+               (sxml->xml sxml socket))
+        (display "" socket))))
+
+(define (request-output-headers request)
+  (let ((rheads '(("Content-Type" . output-type))))
+    (map (lambda (h)
+           (cons (car h)
+                 (or (and=> (assoc-ref (car h) rheads)
+                            (lambda (k) (rref request k #f)))
+                     (cdr h))))
+         (rref request 'output-headers '()))))
 
 (define (connection-received socket sockaddr index)
   (let* ((headers (pk (read-headers socket)))
@@ -84,7 +96,7 @@
        (let ((res (handle-request (make-request 'headers headers
                                                 'post-data post-data)
                                   index)))
-         (write-headers (rref res 'output-headers '()) socket)
+         (write-headers (request-output-headers res) socket)
          (write-body res socket)))
      (lambda args
        (write-headers '(("Status" . "500 Internal Server Error")

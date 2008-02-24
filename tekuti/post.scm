@@ -166,7 +166,7 @@
                  ,(comment-form post "" "" "" ""))))))
 
 (define (post-n-comments post)
-  (length (git-ls-subdirs (assq-ref post 'sha1) "comments/")))
+  (length (git-ls-subdirs (string-append (assq-ref post 'sha1) ":comments") #f)))
 
 (define (post-sxml-n-comments post)
   `(div (@ (class "feedback"))

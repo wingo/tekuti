@@ -51,11 +51,16 @@
             page-debug 
             page-search 
             page-show-post 
+            page-feed-atom
+            page-feed-rss2
             page-debug
             page-not-found))
 
-(define (relurl path . body)
-  `(a (@ (href ,(string-append *public-url-base* path)))
+(define (relurl path)
+  (string-append *public-url-base* path))
+
+(define (rellink path . body)
+  `(a (@ (href ,(relurl path)))
       ,@body))
 
 (define (make-post-key . parts)
@@ -107,7 +112,7 @@
              (assq-ref index 'posts)
              n))
      (rcons* request
-             'body `(,(sidebar-ul `((li (h2 ,(relurl "admin/posts" "posts"))
+             'body `(,(sidebar-ul `((li (h2 ,(rellink "admin/posts" "posts"))
                                         (ul ,@(post-links 10)))
                                     (li (h2 "recent comments")
                                         (p "ain't got none"))))
@@ -115,12 +120,12 @@
                      ,(post-editing-form #f))))))
 
 (define (admin-post-link post)
-  (relurl (string-append "admin/posts/"
+  (rellink (string-append "admin/posts/"
                          (url:encode (assq-ref post 'key)))
           (assq-ref post 'title)))
 
 (define (post-link post)
-  (relurl (string-append "archives/" (url:decode (assq-ref post 'key)))
+  (rellink (string-append "archives/" (url:decode (assq-ref post 'key)))
           (assq-ref post 'title)))
 
 (define (page-admin-posts request index)
@@ -130,7 +135,7 @@
      (define (post-headers)
        (map (lambda (post)
               ;; double-encoding is a hack to trick apache
-              `(h3 ,(relurl (string-append "admin/posts/" (url:encode (assq-ref post 'key)))
+              `(h3 ,(rellink (string-append "admin/posts/" (url:encode (assq-ref post 'key)))
                             (assq-ref post 'title))))
             (assq-ref index 'posts)))
      (rcons* request
@@ -262,8 +267,9 @@
                   (rcons* request
                           'body `((p "Bad post data: " ,reason)))))
             (else
-             (rcons* request
-                     'body `((p "hey hey hey like fat albert")))))))
+             (let ((comment (make-new-comment (post-from-tree slug tree) data)))
+               (rcons* request
+                       'body `((p "hey hey hey like fat albert" ,comment))))))))
      (else
       (page-not-found request index)))))
 
@@ -356,3 +362,59 @@
           'status 404
           'body `((h1 "Page not found")
                   (p "Unknown path: " ,(rref request 'path-str)))))
+
+(define (page-feed-rss2 request index)
+  (not-implemented request index))
+
+
+(define (rfc822-date->timestamp str)
+  (+ (time-second (date->time-utc
+                   (string->date str "~a, ~d ~b ~Y ~H:~M:~S GMT")))
+     (date-zone-offset (current-date))))
+
+(define (timestamp->atom-date timestamp)
+  (date->string (time-utc->date (make-time time-utc 0 timestamp) 0)
+                "~Y-~m-~dT~H:~M:~SZ"))
+
+(define (page-feed-atom request index)
+  (let ((last-modified (let ((posts (assq-ref index 'posts)))
+                         (and (pair? posts)
+                              (assq-ref (car posts) 'timestamp)))))
+    (cond
+     ((let ((since (assoc-ref (rref request 'headers '())
+                              "If-Modified-Since")))
+        (and since (>= (rfc822-date->timestamp since) last-modified)))
+      (rcons* request
+              'status 304
+              'doctype #f))
+     (else
+      (rcons* request
+              'doctype ""
+              'output-type "application/atom+xml"
+              'sxml `(feed
+                      (@ (xmlns "http://www.w3.org/2005/Atom")
+                         (xml:base ,(relurl "feed/atom")))
+                      (title (@ (type "text")) ,*title*)
+                      (subtitle (@ (type "text")) ,*subtitle*)
+                      (updated ,(timestamp->atom-date last-modified))
+                      (generator (@ (uri "http://wingolog.org/software/tekuti")
+                                    (version "what"))
+                                 "tekuti")
+                      (link (@ (rel "alternate") (type "text/html")
+                               (href ,(relurl ""))))
+                      (id ,(relurl "feed/atom"))
+                      (link (@ (rel "self") (type "application/atom+xml")
+                               (href ,(relurl "feed/atom"))))
+                      ,@(map
+                         (lambda (post)
+                           `(entry
+                             (author (name ,*name*) (uri ,(relurl "")))
+                             (title (@ (type "text")) ,(assq-ref post 'title))
+                             (id ,(assq-ref post 'key))
+                             (published ,(timestamp->atom-date
+                                          (assq-ref post 'timestamp)))
+                             (content (@ (type "xhtml")
+                                         (xmlns "http://www.w3.org/1999/xhtml"))
+                                      (div ,(post-sxml-content post)))))
+                         (take-max (assq-ref index 'posts) 10))))))))
+

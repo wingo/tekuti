@@ -34,7 +34,7 @@
   #:use-module (sxml transform)
   #:use-module (match-bind)
   #:export (comment-from-object comment-sxml-content comment-timestamp build-comment-skeleton comment-readable-date
-            bad-new-comment-post?))
+            bad-new-comment-post? make-new-comment))
 
 (define *comment-spec*
   `((timestamp . ,string->number)))
@@ -102,7 +102,7 @@
       `(p "Please pretend to specify a valid email address.")))
 
 (define (urlish? x)
-  (match-bind "^https?://([a-zA-Z0-9-]+\\.)+[a-zA-Z]+/.*$"
+  (match-bind "^https?://([a-zA-Z0-9-]+\\.)+[a-zA-Z]+/[a-zA-Z0-9$_.+!*'(),;/?:@&=-]*$"
               x (_ . args)
               x
               #f))
@@ -213,42 +213,44 @@
        (if (not (assoc name dent-names))
            (error "file already removed" name)))
      names))
-  (define (collect proc l)
-    (reverse! (fold (lambda (x y)
-                      (let ((foo (proc x)))
-                        (if foo (cons foo y) y)))
-                    '() l)))
-  (define (level-down x)
-    (cons (cdar x) (cdr x)))
-  
-  (let-values (((dents) (git-ls-tree treeish #f))
+  (let-values (((dents) (if treeish (git-ls-tree treeish #f) '()))
                ((ladd dadd) (partition local? add))
                ((lremove dremove) (partition local? remove))
                ((lchange dchange) (partition local? change)))
-    (assert-added-files-not-present (map caadr ladd) dents)
+    (assert-added-files-not-present (map cadr ladd) dents)
     (assert-referenced-files-present
-     (append (map cadr lremove) (map caadr lchange)) dents)
-    
-    (make-tree
-     (append
-      (map cdr ladd)
-      (collect
-       (lambda (dent)
-         (cond
-          ((member (car dent) (map cadr lremove))
-           #f)
-          ((member (car dent) (map caadr lchange))
-           (cadr lchange))
-          ((and (equal? (caddr dent) "tree")
-                (or (member (car dent)
-                            (map cadr (append dadd dremove dchange)))))
-           `(,(car dent) (make-tree-deep (cadr dent)
-                                         (map level-down dadd)
-                                         (map level-down dremove)
-                                         (map level-down dchange))
-             ,(caddr dent) ,(cadddr dent)))
-          (else dent))))))))
-  
+     (append (map cdr lremove) (map caar lchange)) dents)
+    (pk 'make-tree-deep treeish add remove change)
+    (make-tree-full
+     (pk 'making (append
+       (map cdr ladd)
+       (filter-map
+        (lambda (dent)
+          (cond
+           ((member (car dent) (map cdr lremove))
+            #f)
+           ((member (car dent) (map cadr lchange))
+            (cdr lchange))
+           ((and (equal? (caddr dent) "tree")
+                 (member (car dent)
+                         (map caar (append dadd dremove dchange))))
+            (pk 'hi! dent (map caar (append dadd dremove dchange)))
+            (let ((level-down (lambda (x)
+                                (if (equal? (caar x) (car dent))
+                                    (cons (cdar x) (cdr x))
+                                    #f))))
+              (list (car dent)
+                    (make-tree-deep (cadr dent)
+                                    (filter-map level-down dadd)
+                                    (filter-map level-down dremove)
+                                    (filter-map level-down dchange))
+                    "tree" "040000")))
+           (else dent)))
+        (append (filter-map (lambda (x)
+                              (and (not (assoc (caar x) dents))
+                                   (list x "tree" #f #f))
+                              dadd))
+                dents)))))))
     
 (define (mutate-tree master add remove change message)
   (let ((tree (make-tree-deep master add remove change)))
@@ -256,9 +258,9 @@
      (git* `("commit-tree" ,tree "-p" ,master) #:input message
            #:env '("GIT_COMMMITTER=tekuti")))))
 
-(define (update-master master proc)
-  (let lp ((master master))
-    (let ((commit (proc master)) (count 5))
+(define (update-master proc)
+  (let lp ((master (git-rev-parse "master")) (count 5))
+    (let ((commit (proc master)))
       (cond
        ((zero? count)
         (error "my god, we looped 5 times" commit))
@@ -269,21 +271,31 @@
         (pk "failed to update the master ref, trying again...")
         (lp (git-rev-parse "master") (1- count)))))))
 
-(define (make-new-comment post content)
-  (let ((content-sha1 (make-blob 
-(assoc-ref post-data "comment")))
-        (metadata-sha1 (make-blob (with-output-to-string
-                                    (lambda ()
-                                      (write )
-                                      )
-) metadata)))
-    (update-master
-     master
-     (lambda (master)
-       (mutate-tree master
-                    `(((,(assq-ref post 'key) "comments" ,comment-key)
-                       ("content" ,content-sha1 "blob" "100644"))
-                      ((,(assq-ref post 'key) "metadata" ,comment-key)
-                       ("metadata" ,metadata-sha1 "blob" "100644")))
-                    '()
-                    '())))))
+(define (make-new-comment post post-data)
+  (let ((content (assoc-ref post-data "comment"))
+        (author (assoc-ref post-data "author"))
+        (email (assoc-ref post-data "email"))
+        (url (assoc-ref post-data "url"))) 
+    (let ((sha1 (create-blob 
+                 (with-output-to-string
+                   (lambda ()
+                     (for-each
+                      (lambda (pair)
+                        (format #t "~a: ~a\n" (car pair) (cdr pair)))
+                      `((timestamp . ,(time-second (current-time)))
+                        (author . ,(string-join
+                                    ;; security foo
+                                    (string-split author #\newline)
+                                    " "))
+                        (author_email . ,email)
+                        (author_url . ,url)))
+                     (display "\n")
+                     (display content))))))
+      (update-master
+       (lambda (master)
+         (mutate-tree master
+                      `(((,(assq-ref post 'key) "comments") . (,sha1 ,sha1 "blob" "100644")))
+                      '()
+                      '()
+                      "new comment"))))))
+

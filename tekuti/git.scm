@@ -63,7 +63,7 @@
 		(string->list str))
       (display #\'))))
       
-(define *debug* #f)
+(define *debug* #t)
 (define (trc . args)
   (if *debug*
       (apply pk args)
