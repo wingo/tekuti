@@ -28,7 +28,7 @@
   #:use-module (tekuti util)
   #:export (*host* *port* *backlog* *git-dir* *git* *public-url-base*
             *private-url-base* *debug* *admin-user* *admin-pass*
-            *title* *name*))
+            *title* *subtitle* *name*))
 
 (define *host* "127.0.0.1")
 (define *port* 8081)
