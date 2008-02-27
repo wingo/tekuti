@@ -98,6 +98,7 @@ def main(args):
     os.chdir(d)
     _, host, user, passwd, database = args
     cxn = db.connect(host=host, user=user, passwd=passwd, db=database)
+    cxn.cursor().execute("set names 'utf8'")
     for post in all_posts():
         write_post (post, post_categories (post), post_comments (post))
     

@@ -147,14 +147,15 @@
     (categories ,reindex-categories ,write-hash ,read-hash)))
 
 (use-modules (statprof))
-(define (reindex master)
+(define (reindex oldindex master)
   (with-backtrace
    (lambda ()
      (with-time-debugging
       (lambda ()
         (with-statprof #:hz 100
                        (fold (lambda (pair index)
-                               (acons (car pair) ((cadr pair) index)
+                               (acons (car pair)
+                                      ((cadr pair) oldindex index)
                                       index))
                              (acons 'master master '())
                              indices)))))))
@@ -163,9 +164,14 @@
   (let ((master (git-rev-parse "master")))
     (if (and old-index (equal? (assq-ref (cdr old-index) 'master) master))
         old-index
-        (let ((new-index (reindex master)))
-          (cons (write-indices new-index (and=> old-index car) indices)
-                new-index)))))
+        (catch #t
+               (lambda ()
+                 (let ((new-index (reindex (and=> old-index cdr) master)))
+                   (cons (write-indices new-index (and=> old-index car) indices)
+                         new-index)))
+               (lambda (key . args)
+                 (warn "error while reindexing:" key args)
+                 old-index)))))
 
 (define (inner-loop socket index)
   (let* ((pair (accept socket))

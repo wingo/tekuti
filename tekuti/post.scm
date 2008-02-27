@@ -166,7 +166,7 @@
                  ,(comment-form post "" "" "" ""))))))
 
 (define (post-n-comments post)
-  (length (git-ls-subdirs (string-append (assq-ref post 'sha1) ":comments") #f)))
+  (length (git-ls-tree (string-append (assq-ref post 'sha1) ":comments") #f)))
 
 (define (post-sxml-n-comments post)
   `(div (@ (class "feedback"))
@@ -175,5 +175,21 @@
                                     "#comments")))
            "(" ,(post-n-comments post) ")")))
 
-(define (reindex-posts index)
-  (all-published-posts (assq-ref index 'master)))
+(define (hash-fill proc list)
+  (let ((table (make-hash-table)))
+    (for-each (lambda (x) (proc x table))
+              list)
+    table))
+
+(define (reindex-posts oldindex newindex)
+  (let ((old (hash-fill (lambda (post h)
+                          (hash-set! h (assq-ref post 'sha1) post))
+                        (or (assq-ref oldindex 'posts) '()))))
+    (dsu-sort (map (lambda (dent)
+                     (or (hash-ref old (cadr dent))
+                         (begin (pk 'updated dent)
+                                (post-from-tree (car dent) (cadr dent)))))
+                   (git-ls-tree (assq-ref newindex 'master) #f))
+              post-timestamp
+              >)))
+

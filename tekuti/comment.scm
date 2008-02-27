@@ -220,56 +220,42 @@
     (assert-added-files-not-present (map cadr ladd) dents)
     (assert-referenced-files-present
      (append (map cdr lremove) (map caar lchange)) dents)
-    (pk 'make-tree-deep treeish add remove change)
+    ; (trc 'make-tree-deep treeish add remove change)
     (make-tree-full
-     (pk 'making (append
-       (map cdr ladd)
-       (filter-map
-        (lambda (dent)
-          (cond
-           ((member (car dent) (map cdr lremove))
-            #f)
-           ((member (car dent) (map cadr lchange))
-            (cdr lchange))
-           ((and (equal? (caddr dent) "tree")
-                 (member (car dent)
-                         (map caar (append dadd dremove dchange))))
-            (pk 'hi! dent (map caar (append dadd dremove dchange)))
-            (let ((level-down (lambda (x)
-                                (if (equal? (caar x) (car dent))
-                                    (cons (cdar x) (cdr x))
-                                    #f))))
-              (list (car dent)
-                    (make-tree-deep (cadr dent)
-                                    (filter-map level-down dadd)
-                                    (filter-map level-down dremove)
-                                    (filter-map level-down dchange))
-                    "tree" "040000")))
-           (else dent)))
-        (append (filter-map (lambda (x)
-                              (and (not (assoc (caar x) dents))
-                                   (list x "tree" #f #f))
-                              dadd))
-                dents)))))))
+     (append
+      (map cdr ladd)
+      (filter-map
+       (lambda (dent)
+         (cond
+          ((member (car dent) (map cdr lremove))
+           #f)
+          ((member (car dent) (map cadr lchange))
+           (cdr lchange))
+          ((and (equal? (caddr dent) "tree")
+                (member (car dent)
+                        (map caar (append dadd dremove dchange))))
+           (let ((level-down (lambda (x)
+                               (if (equal? (caar x) (car dent))
+                                   (cons (cdar x) (cdr x))
+                                   #f))))
+             (list (car dent)
+                   (make-tree-deep (cadr dent)
+                                   (filter-map level-down dadd)
+                                   (filter-map level-down dremove)
+                                   (filter-map level-down dchange))
+                   "tree" "040000")))
+          (else dent)))
+       (append (filter-map (lambda (x)
+                             (and (not (assoc (caar x) dents))
+                                  (list (caar x) #f "tree" #f)))
+                           dadd)
+               dents))))))
     
 (define (mutate-tree master add remove change message)
   (let ((tree (make-tree-deep master add remove change)))
     (string-trim-both
      (git* `("commit-tree" ,tree "-p" ,master) #:input message
            #:env '("GIT_COMMMITTER=tekuti")))))
-
-(define (update-master proc)
-  (let lp ((master (git-rev-parse "master")) (count 5))
-    (let ((commit (proc master)))
-      (cond
-       ((zero? count)
-        (error "my god, we looped 5 times" commit))
-       ((false-if-git-error
-         (git "update-ref" "refs/heads/master" commit master))
-        commit)
-       (else
-        (pk "failed to update the master ref, trying again...")
-        (lp (git-rev-parse "master") (1- count)))))))
 
 (define (make-new-comment post post-data)
   (let ((content (assoc-ref post-data "comment"))
@@ -291,11 +277,14 @@
                         (author_url . ,url)))
                      (display "\n")
                      (display content))))))
-      (update-master
+      (git-update-ref
+       "refs/heads/master"
        (lambda (master)
          (mutate-tree master
                       `(((,(assq-ref post 'key) "comments") . (,sha1 ,sha1 "blob" "100644")))
                       '()
                       '()
-                      "new comment"))))))
+                      "new comment"))
+       5))))
+
 

@@ -52,15 +52,6 @@
    "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\" "
    "\"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\">\n"))
 
-;; what the hell is this
-(define (request-output-headers request)
-  (let-request request ((output-headers '())
-                        (status 200)
-                        (content-type "text/html"))
-    (acons "Status" (status->string status)
-           (acons "Content-Type" content-type
-                  output-headers))))
-
 ;;; useless macro
 (define-macro (let-headers headers bindings . body)
   (let ((headers-var (gensym)))
@@ -82,7 +73,9 @@
           'output-headers
           (cons "Status" (status->string (rref request 'status 200)))
           'output-headers
-          (cons "Content-Type" (rref request 'content-type "text/html"))))
+          (cons "Content-Type"
+                (string-append (rref request 'content-type "text/html")
+                               "; charset=utf-8"))))
 
 (define (choose-handler request)
   (request-path-case

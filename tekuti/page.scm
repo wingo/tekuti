@@ -390,7 +390,7 @@
      (else
       (rcons* request
               'doctype ""
-              'output-type "application/atom+xml"
+              'content-type "application/atom+xml"
               'sxml `(feed
                       (@ (xmlns "http://www.w3.org/2005/Atom")
                          (xml:base ,(relurl "feed/atom")))

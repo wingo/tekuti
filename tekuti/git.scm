@@ -39,7 +39,7 @@
             git git* ensure-git-repo git-ls-tree git-ls-subdirs
             parse-metadata parse-commit commit-utc-timestamp
             commit-parents make-tree git-rev-parse make-tree-full
-            create-blob
+            create-blob git-update-ref
 
             write-indices read-indices))
 
@@ -63,7 +63,7 @@
 		(string->list str))
       (display #\'))))
       
-(define *debug* #t)
+(define *debug* #f)
 (define (trc . args)
   (if *debug*
       (apply pk args)
@@ -88,7 +88,8 @@
          (ret (close-pipe pipe)))
     (case (status:exit-val ret)
       ((0) (if (eof-object? output) "" output))
-      (else (raise (condition (&git-condition
+      (else (trc 'git-error output ret real-args)
+            (raise (condition (&git-condition
                                (argv real-args)
                                (output output)
                                (status ret))))))))
@@ -210,6 +211,19 @@
                                 (reverse l)))
                        alist)
                   "\n" 'suffix))))
+
+(define (git-update-ref refname proc count)
+  (let* ((ref (git-rev-parse refname))
+         (commit (proc ref)))
+    (cond
+     ((zero? count)
+      (error "my god, we looped 5 times" commit))
+     ((false-if-git-error
+       (git "update-ref" refname commit ref))
+      commit)
+     (else
+      (pk "failed to update the ref, trying again..." refname)
+      (git-update-ref (git-rev-parse refname) (1- count))))))
 
 ;; fixme: map-pairs
 

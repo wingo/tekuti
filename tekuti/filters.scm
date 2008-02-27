@@ -68,7 +68,7 @@
                             (scons tail (cdr in)) out)
                         (lp #f (scons tail (cdr in))
                             (pclose (scons head p) out)))
-                    (lp (cons (car in) (or p '()))
+                    (lp (scons (car in) p)
                         (cdr in) out)))
        ((inline? (caar in))
         (lp (scons (car in) p) (cdr in) out))
@@ -76,21 +76,18 @@
         (lp #f (cdr in)
             (cons (car in) (pclose p out))))))))
 
+(wpautop 'div
+         `((b "foo") "\n\n" (b "bar")))
+
+
 (define (wordpress->sxml text)
-  (catch 'parser-error
-(lambda ()
   (let ((sxml (cadr (with-input-from-string (string-append "<div>" text "</div>")
                       xml->sxml))))
     (pre-post-order
-     sxml
+     (pk sxml)
      `((*default* . ,(lambda (tag . body)
                        (if (can-contain-p? tag)
                            (wpautop tag body)
                            (cons tag body))))
        (*text* . ,(lambda (tag text)
                     text))))))
-         (lambda (key . args)
-           `(pre "parse error: "
-                 ,(with-output-to-string (lambda () (write args)))
-                 "\n"
-                 ,text))))
