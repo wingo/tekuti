@@ -234,7 +234,6 @@
 
 (define (page-index request index)
   (rcons* request
-          'title "my bloggidy blog"
           'body `(,(main-sidebar request index)
                   ,@(map (lambda (post)
                            (show-post post #f))
@@ -248,7 +247,8 @@
       => (lambda (tree)
            (let ((post (post-from-tree slug tree)))
              (rcons* request
-                     'title (assq-ref post 'title)
+                     'title (string-append (assq-ref post 'title)
+                                           " -- " *title*)
                      'body (show-post post #t)))))
      (else
       (page-not-found request index)))))
@@ -269,7 +269,9 @@
             (else
              (let ((comment (make-new-comment (post-from-tree slug tree) data)))
                (rcons* request
-                       'body `((p "hey hey hey like fat albert" ,comment))))))))
+                       'title "comment posted"
+                       'body `((p "Comment, posted, thanks.")
+                               (p "Back to the post: " (post-link post)))))))))
      (else
       (page-not-found request index)))))
 
@@ -317,10 +319,9 @@
         (lambda (x) #f))
     
       (let lp ((posts (assq-ref index 'posts)))
-        (pk 'foo (or (null? posts) (car posts)))
         (cond ((or (null? posts) (too-early? (car posts)))
                (rcons* request
-                       'title "no posts found"
+                       'title *title*
                        'body `((h1 "No posts found")
                                (p "No posts were found in the specified period."))))
               ((early-enough? (car posts))
@@ -328,7 +329,7 @@
                  (cond
                   ((or (null? posts) (too-early? (car posts)))
                    (rcons* request
-                           'title "archives"
+                           'title (string-append "archives -- " *title*)
                            'body (reverse out)))
                   ((new-header (car posts))
                    => (lambda (sxml)
@@ -346,7 +347,7 @@
 
 (define (page-debug request index)
   (rcons* request
-          'title "hello"
+          'title "debug"
           'body `((p "hello world!")
                   (table
                    (tr (th "header") (th "value"))
@@ -427,4 +428,3 @@
                                       (div (@ (xmlns "http://www.w3.org/1999/xhtml"))
                                            ,(post-sxml-content post)))))
                          (take-max (assq-ref index 'posts) 10))))))))
-

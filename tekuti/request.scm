@@ -157,7 +157,7 @@
                             (nreq (if req (- (length req) nopt) 0)))
                        (lambda (path)
                          (let ((pathtail (list-head-match pat path (- npat ntail))))
-                           (pk pat npat ntail req opt nopt nreq path pathtail)
+                           ;(pk pat npat ntail req opt nopt nreq path pathtail)
                            (if (and pathtail (>= (length pathtail) nreq)
                                     (<= (length pathtail) (+ nreq nopt)))
                                (append pathtail

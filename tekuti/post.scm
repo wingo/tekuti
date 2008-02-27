@@ -126,7 +126,7 @@
                  (size "22") (tabindex "3")))
        " " (label (@ (for "url")) (small "Website")))
     ;(p (small "allowed tags: "))
-    (p (textarea (@ (name "comment") (id "comment") (cols "100%")
+    (p (textarea (@ (name "comment") (id "comment") (cols "65")
                     (rows "10") (tabindex "4"))
                  ,comment))
     (p (input (@ (name "submit") (type "submit") (id "submit") (tabindex "5")
@@ -147,7 +147,7 @@
       `(li (@ (class "alt") (id ,(assq-ref comment 'key)))
            (cite ,(let ((url (assq-ref comment 'author_url))
                         (name (assq-ref comment 'author)))
-                    (if url
+                    (if (and url (not (string-null? url)))
                         `(a (@ (href ,url) (rel "external nofollow")) ,name)
                         name)))
            " says:" (br)

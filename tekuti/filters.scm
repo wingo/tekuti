@@ -84,7 +84,7 @@
   (let ((sxml (cadr (with-input-from-string (string-append "<div>" text "</div>")
                       xml->sxml))))
     (pre-post-order
-     (pk sxml)
+     sxml
      `((*default* . ,(lambda (tag . body)
                        (if (can-contain-p? tag)
                            (wpautop tag body)

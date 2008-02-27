@@ -45,9 +45,9 @@
                   '("about" "software" "writings" "photos"))
              " | ")))
   `(html
-    (head (title ,(rref request 'title "wingolog"))
+    (head (title ,(rref request 'title *title*))
           (meta (@ (name "Generator")
-                   (content "The Guile SXML Toolkit")))
+                   (content "An unholy concoction of parenthetical guile")))
           (link (@ (rel "stylesheet")
                    (type "text/css")
                    (media "screen")
@@ -55,9 +55,11 @@
     (body
      (div (@ (id "rap"))
           (h1 (@ (id "header"))
-              (a (@ ,(href "")) "wingolog"))
+              (a (@ ,(href "")) ,*title*))
           ,(make-navbar)
           (div (@ (id "content"))
-               ,@(rref request 'body '((p "what"))))
+               ,@(rref request 'body '((p "(missing content?)"))))
           (div (@ (id "footer"))
-               "powered by sxml")))))
+               "powered by "
+               (a (@ (href "http://wingolog.org/software/tekuti/"))
+                  "parentheses"))))))
