@@ -217,15 +217,10 @@
 
 (define (main-sidebar request index)
   (sidebar-ul
-   `((li (h2 "orbit")
-         (ul
-          ,@(map (lambda (pair)
-                   `(li (a (@ (href ,(car pair))) ,(cdr pair))))
-                 '(("http://advogato.org/recentlog.html?thresh=3" . "advogato")
-                   ("http://ambient.2y.net/" . "ambient")
-                   ("http://planet.gnome.org/" . "gnome")
-                   ("http://gstreamer.freedesktop.org/planet/" . "gstreamer")
-                   ("http://planet.lisp.org/" . "lisp")))))
+   `((li (h2 (a (@ (href ,(relurl "feed/atom")))
+                (img (@ (href ,(relurl "wp-content/feed-icon-14x14.png"))
+                        (alt "subscribe to this feed")))
+                " subscribe")))
      (li (h2 "tags "
              (a (@ (href ,(string-append *public-url-base* "tags/")))
                 ">>"))
