@@ -418,9 +418,11 @@
                            `(entry
                              (author (name ,*name*) (uri ,(relurl "")))
                              (title (@ (type "text")) ,(assq-ref post 'title))
-                             (id ,(assq-ref post 'key))
+                             (id ,(relurl (url:decode (assq-ref post 'key)))) ;hack
                              (published ,(timestamp->atom-date
                                           (assq-ref post 'timestamp)))
+                             (updated ,(timestamp->atom-date
+                                        (assq-ref post 'timestamp)))
                              (content (@ (type "xhtml"))
                                       (div (@ (xmlns "http://www.w3.org/1999/xhtml"))
                                            ,(post-sxml-content post)))))
