@@ -376,10 +376,18 @@
   (date->string (time-utc->date (make-time time-utc 0 timestamp) 0)
                 "~Y-~m-~dT~H:~M:~SZ"))
 
+(define (request-relurl request)
+  (let ((headers (rref request 'headers)))
+    (let ((server (or (assoc-ref headers "Host")
+                      (assoc-ref headers "server-ip-addr"))))
+      (lambda (tail)
+        (string-append "http://" server "/" tail)))))
+
 (define (page-feed-atom request index)
   (let ((last-modified (let ((posts (assq-ref index 'posts)))
                          (and (pair? posts)
-                              (assq-ref (car posts) 'timestamp)))))
+                              (assq-ref (car posts) 'timestamp))))
+        (relurl (request-relurl request)))
     (cond
      ((let ((since (assoc-ref (rref request 'headers '())
                               "If-Modified-Since")))
@@ -413,8 +421,8 @@
                              (id ,(assq-ref post 'key))
                              (published ,(timestamp->atom-date
                                           (assq-ref post 'timestamp)))
-                             (content (@ (type "xhtml")
-                                         (xmlns "http://www.w3.org/1999/xhtml"))
-                                      (div ,(post-sxml-content post)))))
+                             (content (@ (type "xhtml"))
+                                      (div (@ (xmlns "http://www.w3.org/1999/xhtml"))
+                                           ,(post-sxml-content post)))))
                          (take-max (assq-ref index 'posts) 10))))))))
 
