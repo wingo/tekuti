@@ -130,24 +130,30 @@
 (define (compile-sxslt-rules tags)
   (define (ok . body)
     body)
+  (define (compile-attribute-rule rule)
+    (if (symbol? rule)
+        `(,rule . ,ok)
+        `(,(car rule) . ,(lambda (tag text)
+                           (or ((cdr rule) text)
+                               (throw 'bad-attr-value text))
+                           (list tag text)))))
   `(,@(map (lambda (spec)
              `(,(car spec)
-               ((@ (,@(map (lambda (attr)
-                             (if (symbol? attr)
-                                 `(,attr . ,ok)
-                                 `(,(car attr)
-                                   . ,(lambda (tag text)
-                                        (or ((cdr attr) text)
-                                            (throw 'bad-attr-value text))
-                                        (list tag text)))))
-                           (cdr spec)))
-                   . ,ok))
+               ((@ *preorder*
+                   . ,(let ((rules `((@ (,@(map compile-attribute-rule
+                                                (cdr spec))
+                                         (*text*
+                                          . ,(lambda (tag text) text))
+                                         (*default*
+                                          . ,(lambda (tag . body)
+                                               (throw 'bad-attr tag))))
+                                        . ,ok))))
+                        (lambda tree
+                          (pre-post-order tree rules)))))
                . ,ok))
            *allowed-tags*)
     (*text* . ,(lambda (tag text)
                  text))
-    (@ . ,(lambda (tag text)
-            (throw 'bad-attr tag)))
     (*default* . ,(lambda (tag . body)
                     (throw 'bad-tag tag)))))
 
@@ -251,40 +257,33 @@
                            dadd)
                dents))))))
     
-(define (mutate-tree master add remove change message)
-  (let ((tree (make-tree-deep master add remove change)))
-    (string-trim-both
-     (git* `("commit-tree" ,tree "-p" ,master) #:input message
-           #:env '("GIT_COMMMITTER=tekuti")))))
+(define de-newline (s///g "[\n\r]" " "))
 
 (define (make-new-comment post post-data)
   (let ((content (assoc-ref post-data "comment"))
         (author (assoc-ref post-data "author"))
         (email (assoc-ref post-data "email"))
         (url (assoc-ref post-data "url"))) 
-    (let ((sha1 (create-blob 
-                 (with-output-to-string
-                   (lambda ()
-                     (for-each
-                      (lambda (pair)
-                        (format #t "~a: ~a\n" (car pair) (cdr pair)))
-                      `((timestamp . ,(time-second (current-time)))
-                        (author . ,(string-join
-                                    ;; security foo
-                                    (string-split author #\newline)
-                                    " "))
-                        (author_email . ,email)
-                        (author_url . ,url)))
-                     (display "\n")
-                     (display content))))))
+    (let ((sha1 (with-output-to-blob
+                 (for-each
+                  (lambda (pair)
+                    (format #t "~a: ~a\n" (car pair) (cdr pair)))
+                  `((timestamp . ,(time-second (current-time)))
+                    (author . ,(de-newline author))
+                    (author_email . ,email)
+                    (author_url . ,url)))
+                 (display "\n")
+                 (display content))))
       (git-update-ref
        "refs/heads/master"
        (lambda (master)
-         (mutate-tree master
-                      `(((,(assq-ref post 'key) "comments") . (,sha1 ,sha1 "blob" "100644")))
-                      '()
-                      '()
-                      "new comment"))
+         (git-commit-tree
+          (make-tree-deep master
+                          `(((,(assq-ref post 'key) "comments")
+                             . (,sha1 ,sha1 blob)))
+                          '()
+                          '())
+          master
+          "new comment"
+          #f))
        5))))
-
-

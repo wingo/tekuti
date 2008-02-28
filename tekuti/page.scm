@@ -271,7 +271,11 @@
                (rcons* request
                        'title "comment posted"
                        'body `((p "Comment, posted, thanks.")
-                               (p "Back to the post: " (post-link post)))))))))
+                               ;; fixme: show the post directly; or a redirect?
+                               (p "Back to the post: "
+                                  ,(rellink (string-append "archives/" (url:decode slug))
+                                            post)))))))))
+     
      (else
       (page-not-found request index)))))
 

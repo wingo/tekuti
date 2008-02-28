@@ -29,9 +29,20 @@
   #:use-module (srfi srfi-1)
   #:export (expanduser match-lines dbg unwind-protect dbg dsu-sort
             hash-push! list-has-length? list-head-match mapn
-            take-max read-hash write-hash
+            take-max read-hash write-hash shell:quote
             list-intersperse with-backtrace with-time-debugging define-memoized))
 
+(define (shell:quote str)
+  (with-output-to-string
+    (lambda ()
+      (display #\')
+      (string-for-each (lambda (ch)
+                         (if (eqv? ch #\')
+                             (begin (display #\\) (display #\'))
+                             (display ch)))
+                       str)
+      (display #\'))))
+      
 (define (expanduser path)
   (let ((parts (string-split path #\/)))
     (if (eqv? (string-ref (car parts) 0) #\~)

@@ -39,8 +39,10 @@
             git git* ensure-git-repo git-ls-tree git-ls-subdirs
             parse-metadata parse-commit commit-utc-timestamp
             commit-parents git-mktree git-rev-parse
-            create-blob git-update-ref
+            git-hash-object git-update-ref
             git-commit-tree
+
+            with-output-to-blob with-input-from-blob
 
             write-indices read-indices))
 
@@ -53,17 +55,6 @@
   `(,guard (c ((,git-condition? c) #f))
            ,@body))
 
-(define (shell:quote str)
-  (with-output-to-string
-    (lambda ()
-      (display #\')
-      (for-each (lambda (ch)
-		  (if (eqv? ch #\')
-                      (begin (display #\\) (display #\'))
-                      (display ch)))
-		(string->list str))
-      (display #\'))))
-      
 (define *debug* #f)
 (define (trc . args)
   (if *debug*
@@ -202,9 +193,21 @@
 (define (git-rev-parse rev)
   (string-trim-both (git "rev-parse" rev)))
 
-(define (create-blob contents)
+(define (git-hash-object contents)
   (string-trim-both
    (git* '("hash-object" "-w" "--stdin") #:input contents)))
+
+(define (with-output-to-blob* thunk)
+  (git-hash-object (with-output-to-string thunk)))
+
+(define-macro (with-output-to-blob . forms)
+  `(,with-output-to-blob* (lambda () ,@forms)))
+
+(define (with-input-from-blob* sha1 thunk)
+  (with-input-from-string (git "show" sha1) thunk))
+
+(define-macro (with-input-from-blob sha1 . forms)
+  `(,with-input-from-blob* ,sha1 (lambda () ,@forms)))
 
 (define (git-update-ref refname proc count)
   (let* ((ref (git-rev-parse refname))
@@ -227,7 +230,8 @@
          #:env (if timestamp
                    (list "GIT_COMMMITTER=tekuti"
                          (format #f "GIT_COMMITTER_DATE=~a +0100" timestamp)
-                         (format #f "GIT_AUTHOR_DATE=~a +0100" timestamp))))))
+                         (format #f "GIT_AUTHOR_DATE=~a +0100" timestamp))
+                   (list "GIT_COMMMITTER=tekuti")))))
 
 ;; fixme: map-pairs
 

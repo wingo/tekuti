@@ -26,15 +26,14 @@
 
 (define-module (tekuti mod-lisp)
   #:use-module (ice-9 rdelim)
-  #:use-module ((srfi srfi-1) #:select (fold))
   #:use-module (tekuti config)
   #:use-module (tekuti util)
-  #:use-module (tekuti index) ; rev-parse
+  #:use-module (tekuti index)
   #:use-module (tekuti request)
   #:use-module (tekuti web)
   #:export (event-loop))
 
-;;; thought: ignore SIGPIPE, otherwise apache dying will kill us
+;;; FIXME: ignore SIGPIPE, otherwise apache dying will kill us
 
 (define (read-headers socket)
   (define (read-line*)

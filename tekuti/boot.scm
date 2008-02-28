@@ -37,6 +37,7 @@
 
 (define *option-grammar* '((gds)
                            (usage)
+                           (repl)
                            (version (single-char #\v))
                            (help (single-char #\h))))
 
@@ -55,10 +56,7 @@
 
 ;; krap code
 (define (parse-options args)
-  (let ((opts (getopt-long args '((gds)
-                                  (usage)
-                                  (version (single-char #\v))
-                                  (help (single-char #\h))))))
+  (let ((opts (getopt-long args *option-grammar*)))
     (if (or (option-ref opts 'usage #f)
             (option-ref opts 'help #f)
             (not (null? (option-ref (cdr opts) '() '()))))
@@ -79,4 +77,8 @@
 (define (boot args)
   (let ((options (parse-options args)))
     (ensure-git-repo)
-    (event-loop)))
+    (if (option-ref options 'repl #f)
+        (begin (make-thread event-loop)
+               (scm-style-repl))
+        (event-loop))))
+
