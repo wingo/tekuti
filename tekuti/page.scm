@@ -32,6 +32,7 @@
   #:use-module (tekuti comment)
   #:use-module (tekuti url)
   #:use-module (tekuti request)
+  #:use-module (tekuti page-helpers)
   #:use-module (srfi srfi-34)
   #:use-module (srfi srfi-19)
   #:use-module (scheme kwargs)
@@ -52,16 +53,8 @@
             page-search 
             page-show-post 
             page-feed-atom
-            page-feed-rss2
             page-debug
             page-not-found))
-
-(define (relurl path)
-  (string-append *public-url-base* path))
-
-(define (rellink path . body)
-  `(a (@ (href ,(relurl path)))
-      ,@body))
 
 (define (make-post-key . parts)
   (url:encode (format #f "~{~a~^/~}" (map url:encode parts))))
@@ -72,34 +65,6 @@
           'body `((h1 "Not yet implemented")
                   (p "Path handler not yet implemented: "
                      ,(rref request 'path-str)))))
-
-(define (post-editing-form post)
-  `(form (@ (method "POST")
-            (action ,(string-append *public-url-base* 
-                                    (if post
-                                        (string-append "admin/modify-post/"
-                                                       (url:encode (assq-ref post 'key)))
-                                        "admin/new-post"))))
-         (p "title: "
-            (input (@ (name "title") (type "text")
-                      (value ,(if post (assq-ref post 'title) "")))))
-         (div (textarea (@ (name "body") (rows "20") (cols "80"))
-                        ,(if post (post-raw-content post) "")))
-         (input (@ (type "submit")
-                   (value ,(if post "edit post" "new post"))))))
-
-(define (sidebar-ul body)
-  `(div (@ (id "menu"))
-        (ul ,@body)))
-
-(define (with-authentication request thunk)
-  (if (request-authenticated? request)
-      (thunk)
-      (rcons* (rpush 'output-headers
-                     '("WWW-Authenticate" . "Basic realm=\"Tekuti\"")
-                     request)
-              'status 401
-              'body `((p "Authentication required, yo")))))
 
 (define (page-admin request index)
   (with-authentication
@@ -119,24 +84,13 @@
                      (h2 "new post")
                      ,(post-editing-form #f))))))
 
-(define (admin-post-link post)
-  (rellink (string-append "admin/posts/"
-                         (url:encode (assq-ref post 'key)))
-          (assq-ref post 'title)))
-
-(define (post-link post)
-  (rellink (string-append "archives/" (url:decode (assq-ref post 'key)))
-          (assq-ref post 'title)))
-
 (define (page-admin-posts request index)
   (with-authentication
    request
    (lambda ()
      (define (post-headers)
        (map (lambda (post)
-              ;; double-encoding is a hack to trick apache
-              `(h3 ,(rellink (string-append "admin/posts/" (url:encode (assq-ref post 'key)))
-                            (assq-ref post 'title))))
+              `(h3 ,(admin-post-link post)))
             (assq-ref index 'posts)))
      (rcons* request
              'body `((h1 "all your posts are belong to tekuti")
@@ -148,7 +102,7 @@
    (lambda ()
      (let ((post (post-from-key (assq-ref index 'master) key)))
        (rcons* request
-               'body `((h1 ,(assq-ref post 'title))
+               'body `((h1 ,(post-title post))
                        ,(post-editing-form post)))))))
 
 (define (page-admin-new-post request index)
@@ -164,25 +118,6 @@
                        (p "Created new post: " ,(assoc-ref form-data "title"))
                        (pre ,(assoc-ref form-data "body"))))))))
 
-(define (show-post post comments?)
-  `((h2 (@ (class "storytitle"))
-        ,(post-link post))
-    (div (@ (class "post"))
-         (h3 (@ (class "meta"))
-             ,(post-readable-date post)
-             " (" ,@(list-intersperse (post-tag-links post)
-                                      " | ")
-             ")")
-         (div (@ (class "storycontent"))
-              ,(post-sxml-content post))
-         ,@(if comments? '()
-               (list (post-sxml-n-comments post))))
-    ,@(if comments?
-          (list (post-sxml-comments post))
-          '())))
-
-;;                     (a (@ (href ,new-url)) ,new-url)
-
 (define (page-admin-modify-post request index key)
   (with-authentication
    request
@@ -191,117 +126,45 @@
 (define page-delete-comment not-implemented)
 (define page-delete-post not-implemented)
 
-;; fixme: borks in the no-tags case
-(define (tag-cloud index)
-  (define (determine-sizes counts)
-    (let ((maxcount (apply max counts)))
-      (map (lambda (x)
-             (floor (+ 80 (* 120 (/ x maxcount)))))
-           counts)))
-  (let* ((hash (assq-ref index 'tags))
-         (cats (if hash
-                   (hash-fold (lambda (k v seed) (acons k (length v) seed))
-                              '() hash)
-                   '()))
-         (top-20 (dsu-sort (take-max (dsu-sort cats cdr >) 20)
-                           car string<?)))
-    `(ul (li (@ (style "line-height: 150%"))
-             ,@(list-intersperse
-                (map (lambda (name size)
-                       `(a (@ (href ,(string-append
-                                      *public-url-base* "tags/"
-                                      (url:encode name)))
-                              (rel "tag")
-                              (style ,(format #f "font-size: ~d%" size)))
-                           ,name))
-                     (map car top-20)
-                     (determine-sizes (map cdr top-20)))
-                " "))
-         )))
-
-(define (main-sidebar request index)
-  (sidebar-ul
-   `((li (h2 (a (@ (href ,(relurl "feed/atom")))
-                "subscribe "
-                (img (@ (src ,(relurl "wp-content/feed-icon-14x14.png"))
-                        (alt "subscribe to this feed")))
-                )))
-     (li (h2 "tags "
-             (a (@ (href ,(string-append *public-url-base* "tags/")))
-                ">>"))
-         ,(tag-cloud index)))))
-
-
 (define (page-index request index)
   (rcons* request
           'body `(,(main-sidebar request index)
                   ,@(map (lambda (post)
                            (show-post post #f))
-                         (take-max (assq-ref index 'posts) 10)))))
+                         (published-posts index 10)))))
 
 (define (page-show-post request index year month day post)
-  (let ((slug (make-post-key year month day post)))
-    (cond
-     ((false-if-git-error
-       (git-rev-parse (string-append (assq-ref index 'master) ":" slug)))
-      => (lambda (tree)
-           (let ((post (post-from-tree slug tree)))
-             (rcons* request
-                     'title (string-append (assq-ref post 'title)
-                                           " -- " *title*)
-                     'body (show-post post #t)))))
-     (else
-      (page-not-found request index)))))
+  (cond
+   ((post-from-key (assq-ref index 'master)
+                   (make-post-key year month day post))
+    => (lambda (post)
+         (rcons* request
+                 'title (string-append (post-title post) " -- " *title*)
+                 'body (show-post post #t))))
+   (else
+    (page-not-found request index))))
 
-(define (page-new-comment request index year month day post)
-  (let ((slug (make-post-key year month day post))
-        (data (request-form-data request)))
+(define (page-new-comment request index year month day name)
+  (let ((data (request-form-data request)))
     (cond
-     ((false-if-git-error
-       (git-rev-parse (string-append (assq-ref index 'master) ":" slug)))
-      => (lambda (tree)
+     ((post-from-key (assq-ref index 'master)
+                     (make-post-key year month day name))
+      => (lambda (post)
            (cond
             ((bad-new-comment-post? data)
              => (lambda (reason)
-                  (pk reason)
                   (rcons* request
-                          'body `((p "Bad post data: " ,reason)))))
+                          'body `((p "Bad post data: " ,(pk reason))))))
             (else
-             (let ((comment (make-new-comment (post-from-tree slug tree) data)))
+             (let ((comment (make-new-comment post data)))
+               ;; nb: at this point, `post' is out-of-date
                (rcons* request
                        'title "comment posted"
-                       'body `((p "Comment, posted, thanks.")
+                       'body `((p "Comment posted, thanks.")
                                ;; fixme: show the post directly; or a redirect?
-                               (p "Back to the post: "
-                                  ,(rellink (string-append "archives/" (url:decode slug))
-                                            post)))))))))
-     
+                               (p "Back to the post: " ,(post-link post)))))))))
      (else
       (page-not-found request index)))))
-
-(define/kwargs (date-increment date (day 0) (month 0) (year 0))
-  (make-date (date-nanosecond date) (date-second date)
-             (date-minute date) (date-minute date)
-             (+ (date-day date) day) (+ (date-month date) month)
-             (+ (date-year date) year) (date-zone-offset date)))
-
-(define (date-comparator date comp)
-  (let ((this (time-second (date->time-utc date))))
-    (lambda (that)
-      (comp that this))))
-
-(define (date-before? date)
-  (date-comparator date <))
-
-(define (date-after? date)
-  (date-comparator date >))
-
-(define (compose1 proc . procs)
-  (if (null? procs)
-      proc
-      (let ((other (apply compose1 procs)))
-        (lambda (x)
-          (proc (other x))))))
 
 ;; fixme exception handling for input
 (define (page-archives request index year month day)
@@ -322,7 +185,7 @@
       (define (make-date-header post)
         (lambda (x) #f))
     
-      (let lp ((posts (assq-ref index 'posts)))
+      (let lp ((posts (published-posts index -1)))
         (cond ((or (null? posts) (too-early? (car posts)))
                (rcons* request
                        'title *title*
@@ -362,41 +225,16 @@
 (define page-search not-implemented)
 
 (define (page-not-found request index)
-  (pk request)
-  (rcons* request
+  (rcons* (pk 'not-found request)
           'status 404
           'body `((h1 "Page not found")
                   (p "Unknown path: " ,(rref request 'path-str)))))
 
-(define (page-feed-rss2 request index)
-  (not-implemented request index))
-
-
-(define (rfc822-date->timestamp str)
-  (+ (time-second (date->time-utc
-                   (string->date str "~a, ~d ~b ~Y ~H:~M:~S GMT")))
-     (date-zone-offset (current-date))))
-
-(define (timestamp->atom-date timestamp)
-  (date->string (time-utc->date (make-time time-utc 0 timestamp) 0)
-                "~Y-~m-~dT~H:~M:~SZ"))
-
-(define (timestamp->rfc822-date timestamp)
-  (date->string (time-utc->date (make-time time-utc 0 timestamp) 0)
-                "~a, ~d ~b ~Y ~H:~M:~S GMT"))
-
-(define (request-relurl request)
-  (let ((headers (rref request 'headers)))
-    (let ((server (or (assoc-ref headers "Host")
-                      (assoc-ref headers "server-ip-addr"))))
-      (lambda (tail)
-        (string-append "http://" server "/" tail)))))
-
 (define (page-feed-atom request index)
-  (let ((last-modified (let ((posts (assq-ref index 'posts)))
+  (let ((last-modified (let ((posts (published-posts index 1)))
                          (and (pair? posts)
                               (assq-ref (car posts) 'timestamp))))
-        (relurl (request-relurl request)))
+        (server-name (request-server-name request)))
     (cond
      ((let ((since (assoc-ref (rref request 'headers '())
                               "If-Modified-Since")))
@@ -411,31 +249,8 @@
                      request)
               'doctype ""
               'content-type "application/atom+xml"
-              'sxml `(feed
-                      (@ (xmlns "http://www.w3.org/2005/Atom")
-                         (xml:base ,(relurl "feed/atom")))
-                      (title (@ (type "text")) ,*title*)
-                      (subtitle (@ (type "text")) ,*subtitle*)
-                      (updated ,(timestamp->atom-date last-modified))
-                      (generator (@ (uri "http://wingolog.org/software/tekuti")
-                                    (version "what"))
-                                 "tekuti")
-                      (link (@ (rel "alternate") (type "text/html")
-                               (href ,(relurl ""))))
-                      (id ,(relurl "feed/atom"))
-                      (link (@ (rel "self") (type "application/atom+xml")
-                               (href ,(relurl "feed/atom"))))
-                      ,@(map
-                         (lambda (post)
-                           `(entry
-                             (author (name ,*name*) (uri ,(relurl "")))
-                             (title (@ (type "text")) ,(assq-ref post 'title))
-                             (id ,(relurl (url:decode (assq-ref post 'key)))) ;hack
-                             (published ,(timestamp->atom-date
-                                          (assq-ref post 'timestamp)))
-                             (updated ,(timestamp->atom-date
-                                        (assq-ref post 'timestamp)))
-                             (content (@ (type "xhtml"))
-                                      (div (@ (xmlns "http://www.w3.org/1999/xhtml"))
-                                           ,(post-sxml-content post)))))
-                         (take-max (assq-ref index 'posts) 10))))))))
+              'sxml (append (atom-header server-name last-modified)
+                            (map
+                             (lambda (post)
+                               (atom-entry server-name post))
+                             (published-posts index 10))))))))

@@ -33,32 +33,26 @@
   #:use-module (srfi srfi-19)
   #:use-module (sxml transform)
   #:use-module (match-bind)
-  #:export (comment-from-object comment-sxml-content comment-timestamp build-comment-skeleton comment-readable-date
-            bad-new-comment-post? make-new-comment))
+  #:export (blob->comment comment-sxml-content comment-timestamp
+            comment-readable-date bad-new-comment-post? make-new-comment))
 
 (define *comment-spec*
   `((timestamp . ,string->number)))
-(define (comment-from-object encoded-name sha1)
+
+(define (blob->comment encoded-name sha1)
   (let ((blob (git "show" sha1)))
     (match-bind
      "\n\n(.*)$" blob (_ content)
-     (fold cons
-           (filter
-            identity
-            (match-lines (substring blob 0 (- (string-length blob)
-                                              (string-length _)))
-                         "^([^: ]+): +(.*)$" (_ k v)
-                         (let* ((k (string->symbol k))
-                                (parse (assq-ref *comment-spec* k)))
-                           (if parse
-                               (catch 'parse-error
-                                      (lambda ()
-                                        (cons k (parse v)))
-                                      (lambda args #f))
-                               (cons k v)))))
-           `((raw-content . ,content)
-             (sha1 . ,sha1)
-             (key . ,encoded-name))))))
+     (append
+      `((raw-content . ,content)
+        (sha1 . ,sha1)
+        (key . ,encoded-name))
+      (match-lines (substring blob 0 (- (string-length blob)
+                                        (string-length _)))
+                   "^([^: ]+): +(.*)$" (_ k v)
+                   (let* ((k (string->symbol k))
+                          (parse (or (assq-ref *comment-spec* k) identity)))
+                     (cons k (parse v))))))))
 
 (define (comment-readable-date comment)
   (let ((date (time-utc->date
@@ -78,117 +72,21 @@
 (define (comment-timestamp comment-alist)
   (or (assq-ref comment-alist 'timestamp) #f))
 
-(define (build-comment-skeleton comments)
-  (fold (lambda (sha1 parent)
-          (let* ((ts (comment-timestamp sha1))
-                 (env (list "GIT_COMMMITTER=tekuti"
-                            (format #f "GIT_COMMITTER_DATE=~a +0100" ts)
-                            (format #f "GIT_AUTHOR_DATE=~a +0100" ts))))
-            (string-trim-both
-             (git* (cons* "commit-tree" sha1 (if parent (list "-p" parent) '()))
-                   #:input "comment\n" #:env env))))
-        #f
-        comments))
-
-(define (emailish? x)
-  (match-bind "^([a-zA-Z0-9.+-]+)@([a-zA-Z0-9-]+\\.)+[a-zA-Z]+$"
-              x (_ . args)
-              x
-              #f))
-
 (define (bad-email? x)
   (if (emailish? x)
       #f
       `(p "Please pretend to specify a valid email address.")))
-
-(define (urlish? x)
-  (match-bind "^https?://([a-zA-Z0-9-]+\\.)+[a-zA-Z]+/[a-zA-Z0-9$_.+!*'(),;/?:@&=-]*$"
-              x (_ . args)
-              x
-              #f))
 
 (define (bad-url? x)
   (if (or (string-null? x) (urlish? x))
       #f
       `(p "Bad URL. (Only http and https are allowed.)")))
 
-(define *allowed-tags*
-  `((a (href . ,urlish?) title)
-    (abbr title)
-    (acronym title)
-    (b)
-    (br)
-    (blockquote (cite . ,urlish?))
-    (code)
-    (em)
-    (i)
-    (p)
-    (pre)
-    (strike)
-    (strong)))
-
-(define (compile-sxslt-rules tags)
-  (define (ok . body)
-    body)
-  (define (compile-attribute-rule rule)
-    (if (symbol? rule)
-        `(,rule . ,ok)
-        `(,(car rule) . ,(lambda (tag text)
-                           (or ((cdr rule) text)
-                               (throw 'bad-attr-value text))
-                           (list tag text)))))
-  `(,@(map (lambda (spec)
-             `(,(car spec)
-               ((@ *preorder*
-                   . ,(let ((rules `((@ (,@(map compile-attribute-rule
-                                                (cdr spec))
-                                         (*text*
-                                          . ,(lambda (tag text) text))
-                                         (*default*
-                                          . ,(lambda (tag . body)
-                                               (throw 'bad-attr tag))))
-                                        . ,ok))))
-                        (lambda tree
-                          (pre-post-order tree rules)))))
-               . ,ok))
-           *allowed-tags*)
-    (*text* . ,(lambda (tag text)
-                 text))
-    (*default* . ,(lambda (tag . body)
-                    (throw 'bad-tag tag)))))
-
-;; could be better, reflect nesting rules...
-(define *valid-xhtml-rules*
-  `((div ,(compile-sxslt-rules *allowed-tags*)
-         . ,(lambda body body))))
-
-(use-modules (sxml transform) (tekuti filters))
-(define (bad-xhtml? x)
-  (catch #t
-         (lambda ()
-           (pre-post-order (wordpress->sxml x) *valid-xhtml-rules*)
-           #f)
-         (lambda (key . args)
-           `(div (p "Invalid XHTML")
-                 ,(case key
-                    ((parser-error)
-                     `(pre ,(with-output-to-string
-                              (lambda () (write args)))))
-                    ((bad-tag)
-                     `(p "XHTML tag disallowed: " ,(symbol->string (car args))))
-                    ((bad-attr)
-                     `(p "XHTML attribute disallowed: " ,(symbol->string (car args))))
-                    ((bad-attr-value)
-                     `(p "XHTML attribute has bad value: " ,(car args)))
-                    (else
-                     (pk key args)
-                     `(p "Jesus knows why, and so do you")))))))
-
 (define *new-comment-spec*
   `(("author" ,(lambda (x) #f))
     ("email" ,bad-email?)
     ("url" ,bad-url?)
-    ("comment" ,bad-xhtml?)
+    ("comment" ,bad-user-submitted-xhtml?)
     ("submit" ,(lambda (x) #f))))
 
 (define (bad-new-comment-post? post-data)
@@ -204,59 +102,6 @@
                 ((cadr pair) (assoc-ref post-data (car pair))))
               *new-comment-spec*)))
 
-(use-modules (srfi srfi-11))
-(define (make-tree-deep treeish add remove change)
-  (define (local? x) (null? (car x)))
-  (define (assert-added-files-not-present names dents)
-    (for-each
-     (lambda (dent)
-       (if (member (car dent) names)
-           (error "file already added" dent)))
-     dents))
-  (define (assert-referenced-files-present names dents)
-    (for-each
-     (lambda (name)
-       (if (not (assoc name dent-names))
-           (error "file already removed" name)))
-     names))
-  (let-values (((dents) (if treeish (git-ls-tree treeish #f) '()))
-               ((ladd dadd) (partition local? add))
-               ((lremove dremove) (partition local? remove))
-               ((lchange dchange) (partition local? change)))
-    (assert-added-files-not-present (map cadr ladd) dents)
-    (assert-referenced-files-present
-     (append (map cdr lremove) (map caar lchange)) dents)
-    ; (trc 'make-tree-deep treeish add remove change)
-    (git-mktree
-     (append
-      (map cdr ladd)
-      (filter-map
-       (lambda (dent)
-         (cond
-          ((member (car dent) (map cdr lremove))
-           #f)
-          ((member (car dent) (map cadr lchange))
-           (cdr lchange))
-          ((and (eq? (caddr dent) 'tree)
-                (member (car dent)
-                        (map caar (append dadd dremove dchange))))
-           (let ((level-down (lambda (x)
-                               (if (equal? (caar x) (car dent))
-                                   (cons (cdar x) (cdr x))
-                                   #f))))
-             (list (car dent)
-                   (make-tree-deep (cadr dent)
-                                   (filter-map level-down dadd)
-                                   (filter-map level-down dremove)
-                                   (filter-map level-down dchange))
-                   'tree)))
-          (else dent)))
-       (append (filter-map (lambda (x)
-                             (and (not (assoc (caar x) dents))
-                                  (list (caar x) #f 'tree)))
-                           dadd)
-               dents))))))
-    
 (define de-newline (s///g "[\n\r]" " "))
 
 (define (make-new-comment post post-data)
@@ -277,13 +122,10 @@
       (git-update-ref
        "refs/heads/master"
        (lambda (master)
-         (git-commit-tree
-          (make-tree-deep master
-                          `(((,(assq-ref post 'key) "comments")
-                             . (,sha1 ,sha1 blob)))
-                          '()
-                          '())
-          master
-          "new comment"
-          #f))
+         (git-commit-tree (munge-tree master
+                                      `(((,(assq-ref post 'key) "comments")
+                                         . (,sha1 ,sha1 blob)))
+                                      '()
+                                      '())
+                          master "new comment" #f))
        5))))

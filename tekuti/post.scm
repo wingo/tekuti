@@ -35,16 +35,50 @@
   #:use-module (tekuti filters)
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-19)
-  #:export (reindex-posts post-from-tree post-from-key post-tags
-                          post-timestamp post-key
-            post-sxml-content post-raw-content all-published-posts
-            post-readable-date post-tag-links post-sxml-n-comments
-            post-sxml-comments))
+  #:export (post-from-tree post-from-key
 
-  
-;; introducing new assumption: post urls like yyyy/dd/mm/post; post dirnames the urlencoded post
+            post-tags post-timestamp post-key post-published?
+            post-sxml-content post-raw-content post-readable-date post-tag-links post-sxml-n-comments
+            post-sxml-comments post-title
 
-;; perhaps push this processing into post-from-tree
+            all-published-posts
+
+            reindex-posts))
+
+;;; 
+;;; pulling posts out of git
+;;; 
+
+(define *post-spec*
+  `((timestamp . ,string->number)
+    (tags . ,(lambda (v) (map string-trim-both (string-split v #\,))))
+    (title . ,identity)))
+
+(define (post-from-tree encoded-name sha1)
+  (append `((key . ,encoded-name)
+            (sha1 . ,sha1))
+          (match-lines
+           (git "show" (string-append sha1 ":metadata"))
+           "^([^: ]+): +(.*)$" (_ k v)
+           (let* ((k (string->symbol k))
+                  (parse (or (assq-ref *post-spec* k)
+                             identity)))
+             (cons k (parse v))))))
+
+(define (post-from-key master key . allow-unpublished)
+  (false-if-git-error
+   (let ((pairs (git-ls-subdirs master key)))
+     (and (= (length pairs) 1)
+          (let ((post (post-from-tree key (cdar pairs))))
+            (if (or (post-published? post)
+                    (and (pair? allow-unpublished) (car allow-unpublished)))
+                post
+                #f))))))
+
+;;; 
+;;; accessors
+;;; 
+
 (define (post-published? post-alist)
   (equal? (assq-ref post-alist 'status) "publish"))
 
@@ -57,16 +91,8 @@
 (define (post-key post)
   (assq-ref post 'key))
 
-(define *post-spec*
-  `((timestamp . ,string->number)
-    (tags . ,(lambda (v) (map string-trim-both (string-split v #\,))))
-    (title . ,identity)))
-
-(define (post-from-tree encoded-name sha1)
-  (acons 'key encoded-name
-         (acons 'sha1 sha1
-                (parse-metadata (string-append sha1 ":metadata")
-                                *post-spec*))))
+(define (post-title post)
+  (assq-ref post 'title))
 
 (define (post-raw-content post)
   (git "show" (string-append (assq-ref post 'sha1) ":content")))
@@ -92,26 +118,10 @@
 (define (post-tag-links post)
   (map tag-link (post-tags post)))
 
-(define (post-from-key master key)
-  (let ((pairs (git-ls-subdirs master key)))
-    (and (= (length pairs) 1)
-         (post-from-tree key (cdar pairs)))))
-
-(define (all-posts master)
-  (map (lambda (pair)
-         (post-from-tree (car pair) (cdr pair)))
-       (git-ls-subdirs master #f)))
-
-(define (all-published-posts master)
-  (dsu-sort
-   (filter post-published? (all-posts master))
-   post-timestamp
-   >))
-
 (define (post-comments post)
   (dsu-sort
    (map (lambda (pair)
-          (comment-from-object (car pair) (cadr pair)))
+          (blob->comment (car pair) (cadr pair)))
         (git-ls-tree (string-append (assq-ref post 'sha1) ":comments") #f))
    comment-timestamp
    <))
@@ -179,6 +189,17 @@
                                     (url:decode (assq-ref post 'key))
                                     "#comments")))
            "(" ,(post-n-comments post) ")")))
+
+(define (all-posts master)
+  (map (lambda (pair)
+         (post-from-tree (car pair) (cdr pair)))
+       (git-ls-subdirs master #f)))
+
+(define (all-published-posts master)
+  (dsu-sort
+   (filter post-published? (all-posts master))
+   post-timestamp
+   >))
 
 (define (hash-fill proc list)
   (let ((table (make-hash-table)))

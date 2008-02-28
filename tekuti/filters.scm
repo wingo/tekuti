@@ -28,7 +28,9 @@
   #:use-module (sxml simple)
   #:use-module (sxml transform)
   #:use-module (match-bind)
-  #:export (wordpress->sxml))
+  #:use-module (tekuti util)
+  #:export (wordpress->sxml
+            *allowed-tags* bad-user-submitted-xhtml?))
 
 (define blocks '(table thead tfoot caption colgroup tbody tr td th div
                  dl dd dt ul ol li pre select form map area blockquote
@@ -76,10 +78,6 @@
         (lp #f (cdr in)
             (cons (car in) (pclose p out))))))))
 
-(wpautop 'div
-         `((b "foo") "\n\n" (b "bar")))
-
-
 (define (wordpress->sxml text)
   (let ((sxml (cadr (with-input-from-string (string-append "<div>" text "</div>")
                       xml->sxml))))
@@ -91,3 +89,75 @@
                            (cons tag body))))
        (*text* . ,(lambda (tag text)
                     text))))))
+
+(define *allowed-tags*
+  `((a (href . ,urlish?) title)
+    (abbr title)
+    (acronym title)
+    (b)
+    (br)
+    (blockquote (cite . ,urlish?))
+    (code)
+    (em)
+    (i)
+    (p)
+    (pre)
+    (strike)
+    (strong)))
+
+(define (compile-sxslt-rules tags)
+  (define (ok . body)
+    body)
+  (define (compile-attribute-rule rule)
+    (if (symbol? rule)
+        `(,rule . ,ok)
+        `(,(car rule) . ,(lambda (tag text)
+                           (or ((cdr rule) text)
+                               (throw 'bad-attr-value text))
+                           (list tag text)))))
+  `(,@(map (lambda (spec)
+             `(,(car spec)
+               ((@ *preorder*
+                   . ,(let ((rules `((@ (,@(map compile-attribute-rule
+                                                (cdr spec))
+                                         (*text*
+                                          . ,(lambda (tag text) text))
+                                         (*default*
+                                          . ,(lambda (tag . body)
+                                               (throw 'bad-attr tag))))
+                                        . ,ok))))
+                        (lambda tree
+                          (pre-post-order tree rules)))))
+               . ,ok))
+           *allowed-tags*)
+    (*text* . ,(lambda (tag text)
+                 text))
+    (*default* . ,(lambda (tag . body)
+                    (throw 'bad-tag tag)))))
+
+;; could be better, reflect nesting rules.
+(define *valid-xhtml-rules*
+  `((div ,(compile-sxslt-rules *allowed-tags*)
+         . ,(lambda body body))))
+
+(define (bad-user-submitted-xhtml? x)
+  (catch #t
+         (lambda ()
+           (pre-post-order (wordpress->sxml x) *valid-xhtml-rules*)
+           #f)
+         (lambda (key . args)
+           `(div (p "Invalid XHTML")
+                 ,(case key
+                    ((parser-error)
+                     `(pre ,(with-output-to-string
+                              (lambda () (write args)))))
+                    ((bad-tag)
+                     `(p "XHTML tag disallowed: " ,(symbol->string (car args))))
+                    ((bad-attr)
+                     `(p "XHTML attribute disallowed: " ,(symbol->string (car args))))
+                    ((bad-attr-value)
+                     `(p "XHTML attribute has bad value: " ,(car args)))
+                    (else
+                     (pk key args)
+                     `(p "Jesus knows why, and so do you")))))))
+

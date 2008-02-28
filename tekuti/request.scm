@@ -34,7 +34,7 @@
   #:use-module (tekuti base64)
   #:export (make-request rcons rcons* rpush rpush* rref let-request
             request-path-case request-authenticated?
-            request-form-data))
+            request-form-data request-server-name))
 
 (define (header-ref headers key default)
   (let ((pair (assoc key headers)))
@@ -189,3 +189,10 @@
     (,let-request ,request (method path)
                   (cons method path))
     ,@clauses))
+
+(define (request-server-name request)
+  (let ((headers (rref request 'headers)))
+    (or (assoc-ref headers "Host")
+        (assoc-ref headers "server-ip-addr"))))
+
+
