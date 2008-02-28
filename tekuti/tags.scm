@@ -20,26 +20,33 @@
 
 ;;; Commentary:
 ;;
-;; This is the main script that will launch tekuti.
+;; Tags, tags, tags
 ;;
 ;;; Code:
 
-(define-module (tekuti categories)
+(define-module (tekuti tags)
   #:use-module (tekuti util)
+  #:use-module (tekuti url)
+  #:use-module (tekuti config)
   #:use-module (tekuti post)
   #:use-module (tekuti git)
-  #:export (reindex-categories))
+  #:export (tag-link reindex-tags))
 
-(define (compute-categories posts)
+(define (tag-link tagname)
+  `(a (@ (href ,(string-append *public-url-base* "tags/"
+                               (url:encode tagname))))
+      ,tagname))
+
+(define (compute-tags posts)
   (let ((hash (make-hash-table)))
     (for-each
      (lambda (post)
        (for-each
         (lambda (cat)
           (hash-push! hash cat (assq-ref post 'key)))
-        (post-categories post)))
+        (post-tags post)))
      posts)
     hash))
 
-(define (reindex-categories old-index index)
-  (compute-categories (assq-ref index 'posts)))
+(define (reindex-tags old-index index)
+  (compute-tags (assq-ref index 'posts)))

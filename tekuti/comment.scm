@@ -221,7 +221,7 @@
     (assert-referenced-files-present
      (append (map cdr lremove) (map caar lchange)) dents)
     ; (trc 'make-tree-deep treeish add remove change)
-    (make-tree-full
+    (git-mktree
      (append
       (map cdr ladd)
       (filter-map
@@ -231,7 +231,7 @@
            #f)
           ((member (car dent) (map cadr lchange))
            (cdr lchange))
-          ((and (equal? (caddr dent) "tree")
+          ((and (eq? (caddr dent) 'tree)
                 (member (car dent)
                         (map caar (append dadd dremove dchange))))
            (let ((level-down (lambda (x)
@@ -243,11 +243,11 @@
                                    (filter-map level-down dadd)
                                    (filter-map level-down dremove)
                                    (filter-map level-down dchange))
-                   "tree" "040000")))
+                   'tree)))
           (else dent)))
        (append (filter-map (lambda (x)
                              (and (not (assoc (caar x) dents))
-                                  (list (caar x) #f "tree" #f)))
+                                  (list (caar x) #f 'tree)))
                            dadd)
                dents))))))
     

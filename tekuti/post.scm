@@ -35,10 +35,10 @@
   #:use-module (tekuti filters)
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-19)
-  #:export (reindex-posts post-from-tree post-from-key post-categories
-                          post-timestamp
+  #:export (reindex-posts post-from-tree post-from-key post-tags
+                          post-timestamp post-key
             post-sxml-content post-raw-content all-published-posts
-            post-readable-date post-category-links post-sxml-n-comments
+            post-readable-date post-tag-links post-sxml-n-comments
             post-sxml-comments))
 
   
@@ -49,14 +49,17 @@
   (equal? (assq-ref post-alist 'status) "publish"))
 
 (define (post-timestamp post-alist)
-  (or (assq-ref post-alist 'timestamp) #f))
+  (assq-ref post-alist 'timestamp))
 
-(define (post-categories post-alist)
-  (or (assq-ref post-alist 'categories) '()))
+(define (post-tags post-alist)
+  (or (assq-ref post-alist 'tags) '()))
+
+(define (post-key post)
+  (assq-ref post 'key))
 
 (define *post-spec*
   `((timestamp . ,string->number)
-    (categories . ,(lambda (v) (map string-trim-both (string-split v #\,))))
+    (tags . ,(lambda (v) (map string-trim-both (string-split v #\,))))
     (title . ,identity)))
 
 (define (post-from-tree encoded-name sha1)
@@ -80,12 +83,14 @@
                (make-time time-utc 0 (assq-ref post 'timestamp)))))
     (date->string date "~e ~B ~Y ~l:~M ~p")))
 
-(define (post-category-links post)
-  (map (lambda (cat)
-         `(a (@ (href ,(string-append *public-url-base* "tags/"
-                                      (url:encode cat))))
-             ,cat))
-       (post-categories post)))
+;; hack :-/
+(define (tag-link tagname)
+  `(a (@ (href ,(string-append *public-url-base* "tags/"
+                               (url:encode tagname))))
+      ,tagname))
+
+(define (post-tag-links post)
+  (map tag-link (post-tags post)))
 
 (define (post-from-key master key)
   (let ((pairs (git-ls-subdirs master key)))

@@ -29,8 +29,8 @@
   #:use-module (srfi srfi-1)
   #:export (expanduser match-lines dbg unwind-protect dbg dsu-sort
             hash-push! list-has-length? list-head-match mapn
-            take-max
-            list-intersperse with-backtrace define-memoized))
+            take-max read-hash write-hash
+            list-intersperse with-backtrace with-time-debugging define-memoized))
 
 (define (expanduser path)
   (let ((parts (string-split path #\/)))
@@ -115,7 +115,7 @@
     (force-output cep)
     (apply throw key args)))
 
-(define (with-backtrace proc)
+(define (with-backtrace* proc)
   (debug-enable 'backtrace)
   (start-stack 'with-backtrace
                (catch #t
@@ -124,6 +124,24 @@
                       (lambda args
                         (fluid-set! the-last-stack (make-stack #t 2 0))
                         (apply throw args)))))
+
+(define-macro (with-backtrace . forms)
+  `(,with-backtrace* (lambda () ,@forms)))
+
+(define (gettimeofday-diff prev)
+  (let ((now (gettimeofday)))
+   (+ (- (car now) (car prev))
+      (* 1e-6 (- (cdr now) (cdr prev))))))
+
+(define (with-time-debugging* proc)
+  (pk 'start-clock)
+  (let ((start (gettimeofday)))
+    (unwind-protect
+     (proc)
+     (pk 'stop-clock (gettimeofday-diff start)))))
+
+(define-macro (with-time-debugging . forms)
+  `(,with-time-debugging* (lambda () ,@forms)))
 
 (define (memoize1 proc)
   (let ((old-args #f) (cache #f) (proc proc))
@@ -139,3 +157,14 @@
   `(begin
      (define ,form ,@body)
      (set! ,(car form) (,memoize1 ,(car form)))))
+
+(define (write-hash h)
+  (write (hash-fold acons '() h)))
+
+(define (read-hash)
+  (let ((h (make-hash-table)))
+    (for-each (lambda (pair)
+                (hash-set! h (car pair) (cdr pair)))
+              (read))
+    h))
+

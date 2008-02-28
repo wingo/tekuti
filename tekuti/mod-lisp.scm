@@ -26,20 +26,12 @@
 
 (define-module (tekuti mod-lisp)
   #:use-module (ice-9 rdelim)
-  #:use-module (ice-9 receive)
-  #:use-module (ice-9 stack-catch)
   #:use-module ((srfi srfi-1) #:select (fold))
-  #:use-module (sxml simple)
-  #:use-module (sxml transform)
   #:use-module (tekuti config)
   #:use-module (tekuti util)
-  #:use-module (tekuti git) ; rev-parse
+  #:use-module (tekuti index) ; rev-parse
   #:use-module (tekuti request)
   #:use-module (tekuti web)
-
-  ;; these for their reindex methods
-  #:use-module (tekuti post)
-  #:use-module (tekuti categories)
   #:export (event-loop))
 
 ;;; thought: ignore SIGPIPE, otherwise apache dying will kill us
@@ -69,23 +61,13 @@
   (display "end\n" port))
 
 (define (write-body request socket)
-  (let ((sxml (rref request 'sxml #f)))
-    (if sxml
-        (begin (display (rref request 'doctype "") socket)
-               (sxml->xml sxml socket))
-        (display "" socket))))
+  ((rref request 'output error) socket))
 
 (define (request-output-headers request)
-  (let ((rheads '(("Content-Type" . output-type))))
-    (map (lambda (h)
-           (cons (car h)
-                 (or (and=> (assoc-ref (car h) rheads)
-                            (lambda (k) (rref request k #f)))
-                     (cdr h))))
-         (rref request 'output-headers '()))))
+  (rref request 'output-headers '()))
 
 (define (connection-received socket sockaddr index)
-  (let* ((headers (pk (read-headers socket)))
+  (let* ((headers (read-headers socket))
          (post-data (read-chars (string->number
                                  (or (assoc-ref headers "content-length")
                                      "0"))
@@ -102,9 +84,11 @@
        (write-headers '(("Status" . "500 Internal Server Error")
                         ("Content-Type" . "text/plain"))
                       socket)
-       (write args socket)
-       (newline)
-       (with-output-to-port socket backtrace))
+       (display "Sorry bub, had an error. Please let the admin know. Thanks!\n"
+                socket)
+       (write headers) (newline)
+       (write args) (newline)
+       (backtrace))
      (lambda args
        (fluid-set! the-last-stack (make-stack #t 2 0))
        (apply throw args)))
@@ -121,58 +105,6 @@
      (proc socket)
      (shutdown socket 2))))
 
-(define (with-time-debugging proc)
-  (let ((start (gettimeofday)))
-    (pk 'start-clock)
-    (let ((val (proc)))
-      (let ((stop (gettimeofday)))
-        (pk 'stop-clock (+ (- (car stop) (car start))
-                           (* 1e-6 (- (cdr stop) (cdr start)))))
-        
-        val))))
-
-(define (write-hash h)
-  (write (hash-fold acons '() h)))
-
-;; fixme: doesn't share structure with posts index
-(define (read-hash)
-  (let ((h (make-hash-table)))
-    (for-each (lambda (pair)
-                (hash-set! h (car pair) (cdr pair)))
-              (read))
-    h))
-
-(define indices                          
-  `((posts ,reindex-posts ,write ,read)
-    (categories ,reindex-categories ,write-hash ,read-hash)))
-
-(use-modules (statprof))
-(define (reindex oldindex master)
-  (with-backtrace
-   (lambda ()
-     (with-time-debugging
-      (lambda ()
-        (with-statprof #:hz 100
-                       (fold (lambda (pair index)
-                               (acons (car pair)
-                                      ((cadr pair) oldindex index)
-                                      index))
-                             (acons 'master master '())
-                             indices)))))))
-
-(define (maybe-reindex old-index)
-  (let ((master (git-rev-parse "master")))
-    (if (and old-index (equal? (assq-ref (cdr old-index) 'master) master))
-        old-index
-        (catch #t
-               (lambda ()
-                 (let ((new-index (reindex (and=> old-index cdr) master)))
-                   (cons (write-indices new-index (and=> old-index car) indices)
-                         new-index)))
-               (lambda (key . args)
-                 (warn "error while reindexing:" key args)
-                 old-index)))))
-
 (define (inner-loop socket index)
   (let* ((pair (accept socket))
          (fd (car pair))
@@ -185,5 +117,5 @@
   (with-socket
    (lambda (socket)
      (format #t "entering inner loop\n")
-     (inner-loop socket (read-indices indices)))))
+     (inner-loop socket (read-index)))))
 

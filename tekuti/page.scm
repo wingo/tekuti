@@ -170,7 +170,7 @@
     (div (@ (class "post"))
          (h3 (@ (class "meta"))
              ,(post-readable-date post)
-             " (" ,@(list-intersperse (post-category-links post)
+             " (" ,@(list-intersperse (post-tag-links post)
                                       " | ")
              ")")
          (div (@ (class "storycontent"))
@@ -191,14 +191,18 @@
 (define page-delete-comment not-implemented)
 (define page-delete-post not-implemented)
 
+;; fixme: borks in the no-tags case
 (define (tag-cloud index)
   (define (determine-sizes counts)
     (let ((maxcount (apply max counts)))
       (map (lambda (x)
              (floor (+ 80 (* 120 (/ x maxcount)))))
            counts)))
-  (let* ((cats (hash-fold (lambda (k v seed) (acons k (length v) seed))
-                          '() (assq-ref index 'categories)))
+  (let* ((hash (assq-ref index 'tags))
+         (cats (if hash
+                   (hash-fold (lambda (k v seed) (acons k (length v) seed))
+                              '() hash)
+                   '()))
          (top-20 (dsu-sort (take-max (dsu-sort cats cdr >) 20)
                            car string<?)))
     `(ul (li (@ (style "line-height: 150%"))
@@ -218,9 +222,10 @@
 (define (main-sidebar request index)
   (sidebar-ul
    `((li (h2 (a (@ (href ,(relurl "feed/atom")))
-                (img (@ (href ,(relurl "wp-content/feed-icon-14x14.png"))
+                "subscribe "
+                (img (@ (src ,(relurl "wp-content/feed-icon-14x14.png"))
                         (alt "subscribe to this feed")))
-                " subscribe")))
+                )))
      (li (h2 "tags "
              (a (@ (href ,(string-append *public-url-base* "tags/")))
                 ">>"))
@@ -372,6 +377,10 @@
   (date->string (time-utc->date (make-time time-utc 0 timestamp) 0)
                 "~Y-~m-~dT~H:~M:~SZ"))
 
+(define (timestamp->rfc822-date timestamp)
+  (date->string (time-utc->date (make-time time-utc 0 timestamp) 0)
+                "~a, ~d ~b ~Y ~H:~M:~S GMT"))
+
 (define (request-relurl request)
   (let ((headers (rref request 'headers)))
     (let ((server (or (assoc-ref headers "Host")
@@ -392,7 +401,10 @@
               'status 304
               'doctype #f))
      (else
-      (rcons* request
+      (rcons* (rpush 'output-headers (cons "Last-Modified"
+                                           (timestamp->rfc822-date
+                                            last-modified))
+                     request)
               'doctype ""
               'content-type "application/atom+xml"
               'sxml `(feed

@@ -1,7 +1,3 @@
-#! /bin/bash
-# -*- scheme -*-
-exec guile $GUILE_FLAGS -l $0 -e main -- "$@"
-!#
 ;; Tekuti
 ;; Copyright (C) 2008 Andy Wingo <wingo at pobox dot com>
 
@@ -24,7 +20,7 @@ exec guile $GUILE_FLAGS -l $0 -e main -- "$@"
 
 ;;; Commentary:
 ;;
-;; This is the main script that will launch tekuti.
+;; Module to parse options, etc before dropping into the main loop.
 ;;
 ;;; Code:
 
@@ -77,7 +73,7 @@ exec guile $GUILE_FLAGS -l $0 -e main -- "$@"
         (let ((run-utility (@ (ice-9 gds-client) run-utility)))
           (make-thread
            (lambda ()
-             (with-backtrace run-utility)))))
+             (with-backtrace (run-utility))))))
     opts))
 
 (define (boot args)

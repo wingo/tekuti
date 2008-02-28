@@ -63,13 +63,19 @@
                     bindings))
          ,@body))))
 
+(define (make-output request)
+  (lambda (port)
+    (let ((sxml (or (rref request 'sxml #f)
+                    (templatize request))))
+      (if sxml
+          (begin (display (rref request 'doctype "") port)
+                 (sxml->xml sxml port))
+          (display "" port)))))
+
 (define (finalize request)
   ;; update output headers
   ;; templatize body
-  (rpush* (if (assq 'sxml request)
-              request
-              (rcons 'sxml (templatize request)
-                     request))
+  (rpush* (rcons 'output (make-output request) request)
           'output-headers
           (cons "Status" (status->string (rref request 'status 200)))
           'output-headers

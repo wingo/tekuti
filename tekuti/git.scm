@@ -38,8 +38,9 @@
 
             git git* ensure-git-repo git-ls-tree git-ls-subdirs
             parse-metadata parse-commit commit-utc-timestamp
-            commit-parents make-tree git-rev-parse make-tree-full
+            commit-parents git-mktree git-rev-parse
             create-blob git-update-ref
+            git-commit-tree
 
             write-indices read-indices))
 
@@ -135,7 +136,7 @@
        (match-lines (git "ls-tree" treeish (or path "."))
                     "^(.+) (.+) (.+)\t(.+)$" (_ mode type object name)
                     ;; reversed for assoc
-                    (list name object type mode)))
+                    (list name object (string->symbol type))))
       '()))
 
 (define (git-ls-subdirs treeish path)
@@ -184,13 +185,17 @@
         (lambda (x) (eq? (car x) 'parent))
         (parse-commit commit))))
 
-(define (make-tree alist)
+(define (git-mktree alist)
   (string-trim-both
    (git* '("mktree")
          #:input (string-join
-                  (map (lambda (pair)
-                         (let ((name (car pair)) (sha (cdr pair)))
-                           (format #f "040000 tree ~a\t~a" sha name)))
+                  (map (lambda (l)
+                         (format #f
+                                 (if (or (null? (cddr l))
+                                         (equal? (caddr l) 'blob))
+                                     "100644 blob ~a\t~a"
+                                     "040000 tree ~a\t~a")
+                                 (cadr l) (car l)))
                        alist)
                   "\n" 'suffix))))
 
@@ -200,17 +205,6 @@
 (define (create-blob contents)
   (string-trim-both
    (git* '("hash-object" "-w" "--stdin") #:input contents)))
-
-;; order: name object type mode
-(define (make-tree-full alist)
-  (string-trim-both
-   (git* '("mktree")
-         #:input (string-join
-                  (map (lambda (l)
-                         (apply format #f "~a ~a ~a\t~a"
-                                (reverse l)))
-                       alist)
-                  "\n" 'suffix))))
 
 (define (git-update-ref refname proc count)
   (let* ((ref (git-rev-parse refname))
@@ -225,46 +219,15 @@
       (pk "failed to update the ref, trying again..." refname)
       (git-update-ref (git-rev-parse refname) (1- count))))))
 
+(define (git-commit-tree tree parent message timestamp)
+  (string-trim-both
+   (git* (cons* "commit-tree" tree
+                (if parent (list "-p" parent) '()))
+         #:input message
+         #:env (if timestamp
+                   (list "GIT_COMMMITTER=tekuti"
+                         (format #f "GIT_COMMITTER_DATE=~a +0100" timestamp)
+                         (format #f "GIT_AUTHOR_DATE=~a +0100" timestamp))))))
+
 ;; fixme: map-pairs
-
-(define (assoc-list-ref alist key n default)
-  (let ((l (assoc key alist)))
-    (if l (list-ref l n) default)))
-
-(define (write-indices indices oldref specs)
-  (let* ((master (assq-ref indices 'master))
-         (ts (commit-utc-timestamp master))
-         (env (list "GIT_COMMMITTER=tekuti"
-                    (format #f "GIT_COMMITTER_DATE=~a +0100" ts)
-                    (format #f "GIT_AUTHOR_DATE=~a +0100" ts)))
-         (tree (make-tree-full
-                (map (lambda (pair)
-                       (list (symbol->string (car pair))
-                             (create-blob
-                              (with-output-to-string
-                                (lambda ()
-                                  ((assoc-list-ref specs (car pair) 2 write)
-                                   (cdr pair)))))
-                             "blob" "100644"))
-                     indices))))
-    (let ((new (string-trim-both
-                (git* (cons* "commit-tree" tree
-                             (if oldref (list "-p" oldref) '()))
-                      #:input "reindex\n" #:env env))))
-      (or (false-if-git-error
-           (git "update-ref" "refs/heads/index" new (or oldref "")))
-          (warn "could not update indexes ref"))
-      new)))
-
-(define (read-indices specs)
-  (and=> (false-if-git-error (git-rev-parse "refs/heads/index"))
-         (lambda (ref)
-           (cons ref
-                 (map (lambda (dent)
-                        (cons (string->symbol (car dent))
-                              (with-input-from-string 
-                                  (git "show" (cadr dent))
-                                (assoc-list-ref specs (string->symbol (car dent)) 3 read))))
-                      (git-ls-tree (assq-ref (parse-commit ref) 'tree)
-                                    #f))))))
 
