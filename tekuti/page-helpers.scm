@@ -42,8 +42,8 @@
             show-post
             atom-header atom-entry))
 
-(define (relurl path)
-  (string-append *public-url-base* path))
+(define (relurl . paths)
+  (apply string-append *public-url-base* paths))
 
 (define (rellink path . body)
   `(a (@ (href ,(relurl path)))
@@ -59,7 +59,7 @@
   `(form (@ (method "POST")
             (action ,(relurl (if post
                                  (string-append "admin/modify-post/"
-                                                (url:encode (assq-ref post 'key)))
+                                                (url:encode (post-key post)))
                                  "admin/new-post"))))
          (p "title: "
             (input (@ (name "title") (type "text")
@@ -75,13 +75,58 @@
 
 ;; double-encoding is a hack to trick apache
 (define (admin-post-link post)
-  (rellink (string-append "admin/posts/"
-                         (url:encode (post-key post)))
-           (assq-ref post 'title)))
+  (rellink (string-append "admin/posts/" (url:encode (post-key post)))
+           (post-title 'title)))
 
-(define (post-link post)
-  (rellink (string-append "archives/" (url:decode (post-key post)))
-           (assq-ref post 'title)))
+(define (post-url post . tail)
+  (apply relurl "archives/" (url:decode (post-key post)) tail))
+
+(define (post-link post . tail)
+  `(a (@ (href ,(apply post-url post tail))) ,(post-title post)))
+
+(define (comment-form post author email url comment)
+  `(form
+    (@ (action ,(post-url post)) (method "POST"))
+    (p (input (@ (type "text") (name "author") (value ,author)
+                 (size "22") (tabindex "1")))
+       " " (label (@ (for "author")) (small "Name")))
+    (p (input (@ (type "text") (name "email") (value ,email)
+                 (size "22") (tabindex "2")))
+       " " (label (@ (for "email")) (small "Mail (will not be published)")))
+    (p (input (@ (type "text") (name "url") (value ,url)
+                 (size "22") (tabindex "3")))
+       " " (label (@ (for "url")) (small "Website")))
+    ;(p (small "allowed tags: "))
+    (p (textarea (@ (name "comment") (id "comment") (cols "65")
+                    (rows "10") (tabindex "4"))
+                 ,comment))
+    (p (input (@ (name "submit") (type "submit") (id "submit") (tabindex "5")
+                 (value "Submit Comment"))))))
+
+(define (post-sxml-comments post)
+  (let ((comments (post-comments post))
+        (comments-open? (post-comments-open? post)))
+    (define (n-comments-header)
+      (and (or (not (null? comments)) comments-open?)
+           `(h3 (@ (id "comments"))
+                ,(let ((len (length comments)))
+                   (case len
+                     ((0) "No responses")
+                     ((1) "One response")
+                     (else (format #f "~d responses" len)))))))
+    `(div
+      ,@(or (and=> (n-comments-header) list) '())
+      ,@(let ((l (map comment-sxml-content comments)))
+          (if (null? l) l
+              `((ol (@ (class "commentlist")) ,@l))))
+      ,(if (not comments-open?)
+           `(p (@ (id "nocomments")) "Comments are closed.")
+           `(div (h3 "Leave a Reply")
+                 ,(comment-form post "" "" "" ""))))))
+
+(define (tag-link tagname)
+  (rellink (string-append "tags/" (url:encode tagname))
+           tagname))
 
 (define (show-post post comments?)
   `((h2 (@ (class "storytitle"))
@@ -89,18 +134,22 @@
     (div (@ (class "post"))
          (h3 (@ (class "meta"))
              ,(post-readable-date post)
-             " (" ,@(list-intersperse (post-tag-links post)
-                                      " | ")
+             " (" ,@(list-intersperse
+                     (map tag-link (post-tags post))
+                     " | ")
              ")")
          (div (@ (class "storycontent"))
               ,(post-sxml-content post))
-         ,@(if comments? '()
-               (list (post-sxml-n-comments post))))
+         ,@(if comments?
+               '()
+               `((div (@ (class "feedback"))
+                      (a (@ (href ,(post-url post "#comments")))
+                         "(" ,(post-n-comments post) ")")))))
     ,@(if comments?
           (list (post-sxml-comments post))
           '())))
 
-;; fixme: borks in the no-tags case
+;; fixme: borks in the no-tags case; ugly code
 (define (tag-cloud index)
   (define (determine-sizes counts)
     (let ((maxcount (apply max counts)))
@@ -117,9 +166,7 @@
     `(ul (li (@ (style "line-height: 150%"))
              ,@(list-intersperse
                 (map (lambda (name size)
-                       `(a (@ (href ,(string-append
-                                      *public-url-base* "tags/"
-                                      (url:encode name)))
+                       `(a (@ (href ,(relurl "tags/" (url:encode name)))
                               (rel "tag")
                               (style ,(format #f "font-size: ~d%" size)))
                            ,name))
@@ -135,9 +182,7 @@
                 (img (@ (src ,(relurl "wp-content/feed-icon-14x14.png"))
                         (alt "subscribe to this feed")))
                 )))
-     (li (h2 "tags "
-             (a (@ (href ,(string-append *public-url-base* "tags/")))
-                ">>"))
+     (li (h2 "tags " ,(rellink "tags/" ">>"))
          ,(tag-cloud index)))))
 
 (define (atom-header server-name last-modified)

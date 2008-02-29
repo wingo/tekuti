@@ -20,7 +20,7 @@
 
 ;;; Commentary:
 ;;
-;; This is the main script that will launch tekuti.
+;; Posts -- pulling them out of git, and, later, putting them in.
 ;;
 ;;; Code:
 
@@ -38,8 +38,9 @@
   #:export (post-from-tree post-from-key
 
             post-tags post-timestamp post-key post-published?
-            post-sxml-content post-raw-content post-readable-date post-tag-links post-sxml-n-comments
-            post-sxml-comments post-title
+            post-comments-open? post-comments
+            post-sxml-content post-readable-date post-n-comments
+            post-title
 
             all-published-posts
 
@@ -94,6 +95,9 @@
 (define (post-title post)
   (assq-ref post 'title))
 
+(define (post-comments-open? post)
+  (equal? (assq-ref post 'comment_status) "open"))
+
 (define (post-raw-content post)
   (git "show" (string-append (assq-ref post 'sha1) ":content")))
 
@@ -106,17 +110,8 @@
 
 (define (post-readable-date post)
   (let ((date (time-utc->date
-               (make-time time-utc 0 (assq-ref post 'timestamp)))))
+               (make-time time-utc 0 (post-timestamp post)))))
     (date->string date "~e ~B ~Y ~l:~M ~p")))
-
-;; hack :-/
-(define (tag-link tagname)
-  `(a (@ (href ,(string-append *public-url-base* "tags/"
-                               (url:encode tagname))))
-      ,tagname))
-
-(define (post-tag-links post)
-  (map tag-link (post-tags post)))
 
 (define (post-comments post)
   (dsu-sort
@@ -126,69 +121,8 @@
    comment-timestamp
    <))
 
-(define (comment-form post author email url comment)
-  `(form
-    (@ (action ,(string-append *public-url-base* "archives/"
-                               (url:decode (assq-ref post 'key))))
-       (method "POST"))
-    (p (input (@ (type "text") (name "author") (value ,author)
-                 (size "22") (tabindex "1")))
-       " " (label (@ (for "author")) (small "Name")))
-    (p (input (@ (type "text") (name "email") (value ,email)
-                 (size "22") (tabindex "2")))
-       " " (label (@ (for "email")) (small "Mail (will not be published)")))
-    (p (input (@ (type "text") (name "url") (value ,url)
-                 (size "22") (tabindex "3")))
-       " " (label (@ (for "url")) (small "Website")))
-    ;(p (small "allowed tags: "))
-    (p (textarea (@ (name "comment") (id "comment") (cols "65")
-                    (rows "10") (tabindex "4"))
-                 ,comment))
-    (p (input (@ (name "submit") (type "submit") (id "submit") (tabindex "5")
-                 (value "Submit Comment"))))))
-
-(define (post-sxml-comments post)
-  (let ((comments (post-comments post))
-        (comment-status (assq-ref post 'comment_status)))
-    (define (n-comments-header)
-      (and (or (not (null? comments)) (equal? comment-status "open"))
-           `(h3 (@ (id "comments"))
-                ,(let ((len (length comments)))
-                   (case len
-                     ((0) "No responses")
-                     ((1) "One response")
-                     (else (format #f "~d responses" len)))))))
-    (define (show-comment comment)
-      `(li (@ (class "alt") (id ,(assq-ref comment 'key)))
-           (cite ,(let ((url (assq-ref comment 'author_url))
-                        (name (assq-ref comment 'author)))
-                    (if (and url (not (string-null? url)))
-                        `(a (@ (href ,url) (rel "external nofollow")) ,name)
-                        name)))
-           " says:" (br)
-           (small (@ (class "commentmetadata"))
-                  (a (@ (href ,(string-append "#" (assq-ref comment 'key))))
-                     ,(comment-readable-date comment)))
-           ,(comment-sxml-content comment)))
-    `(div
-      ,@(or (and=> (n-comments-header) list) '())
-      ,@(let ((l (map show-comment comments)))
-          (if (null? l) l
-              `((ol (@ (class "commentlist")) ,@l))))
-      ,(if (equal? comment-status "closed")
-           `(p (@ (id "nocomments")) "Comments are closed.")
-           `(div (h3 "Leave a Reply")
-                 ,(comment-form post "" "" "" ""))))))
-
 (define (post-n-comments post)
   (length (git-ls-tree (string-append (assq-ref post 'sha1) ":comments") #f)))
-
-(define (post-sxml-n-comments post)
-  `(div (@ (class "feedback"))
-        (a (@ (href ,(string-append *public-url-base* "archives/"
-                                    (url:decode (assq-ref post 'key))
-                                    "#comments")))
-           "(" ,(post-n-comments post) ")")))
 
 (define (all-posts master)
   (map (lambda (pair)

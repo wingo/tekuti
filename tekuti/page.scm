@@ -233,7 +233,7 @@
 (define (page-feed-atom request index)
   (let ((last-modified (let ((posts (published-posts index 1)))
                          (and (pair? posts)
-                              (assq-ref (car posts) 'timestamp))))
+                              (post-timestamp (car posts)))))
         (server-name (request-server-name request)))
     (cond
      ((let ((since (assoc-ref (rref request 'headers '())

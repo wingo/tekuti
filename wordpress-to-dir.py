@@ -77,7 +77,7 @@ def write_post(post, categories, comments):
         for k, v in post.items():
             if k not in ('content', 'content_filtered'):
                 out += '%s: %s\n' % (k, v)
-        out += 'categories: %s\n' % ', '.join(categories)
+        out += 'tags: %s\n' % ', '.join(categories)
         out += 'timestamp: %s\n' % int(time.mktime(post['date'].timetuple()))
         return out
 

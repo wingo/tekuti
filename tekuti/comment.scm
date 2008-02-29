@@ -20,7 +20,7 @@
 
 ;;; Commentary:
 ;;
-;; This is the main script that will launch tekuti.
+;; Comments -- pulling them out of the database, and making new ones.
 ;;
 ;;; Code:
 
@@ -63,11 +63,21 @@
   (assq-ref comment 'raw-content))
 
 (define (comment-sxml-content comment)
-  (let ((format (or (assq-ref comment 'format) 'wordpress)))
-    ((case format
-       ((wordpress) wordpress->sxml)
-       (else (lambda (text) `(pre ,text))))
-     (comment-raw-content comment))))
+  `(li (@ (class "alt") (id ,(assq-ref comment 'key)))
+       (cite ,(let ((url (assq-ref comment 'author_url))
+                    (name (assq-ref comment 'author)))
+                (if (and url (not (string-null? url)))
+                    `(a (@ (href ,url) (rel "external nofollow")) ,name)
+                    name)))
+       " says:" (br)
+       (small (@ (class "commentmetadata"))
+              (a (@ (href ,(string-append "#" (assq-ref comment 'key))))
+                 ,(comment-readable-date comment)))
+       ,(let ((format (or (assq-ref comment 'format) 'wordpress)))
+          ((case format
+             ((wordpress) wordpress->sxml)
+             (else (lambda (text) `(pre ,text))))
+           (comment-raw-content comment)))))
 
 (define (comment-timestamp comment-alist)
   (or (assq-ref comment-alist 'timestamp) #f))
