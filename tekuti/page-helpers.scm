@@ -189,8 +189,7 @@
   (define (relurl tail)
     (string-append "http://" server-name *public-url-base* tail))
   `(feed
-     (@ (xmlns "http://www.w3.org/2005/Atom")
-        (xml:base ,(relurl "feed/atom")))
+     (@ (xmlns "http://www.w3.org/2005/Atom") (xml:base ,(relurl "")))
      (title (@ (type "text")) ,*title*)
      (subtitle (@ (type "text")) ,*subtitle*)
      (updated ,(timestamp->atom-date last-modified))
@@ -204,12 +203,14 @@
               (href ,(relurl "feed/atom"))))))
 
 (define (atom-entry server-name post)
-  (define (relurl tail)
-    (string-append "http://" server-name *public-url-base* tail))
+  (define (relurl . tail)
+    (apply string-append "http://" server-name *public-url-base* tail))
   `(entry
     (author (name ,*name*) (uri ,(relurl "")))
     (title (@ (type "text")) ,(post-title post))
-    (id ,(relurl (url:decode (post-key post)))) ;hack
+    (id ,(relurl (url:decode (post-key post)))) ;hack -- should include archives...
+    (link (@ (rel "alternate") (type "text/html")
+             (href ,(relurl "archives/" (url:decode (post-key post))))))
     (published ,(timestamp->atom-date (post-timestamp post)))
     (updated ,(timestamp->atom-date (post-timestamp post)))
     (content (@ (type "xhtml"))
