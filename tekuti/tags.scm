@@ -30,6 +30,7 @@
   #:use-module (tekuti config)
   #:use-module (tekuti post)
   #:use-module (tekuti git)
+  #:use-module ((srfi srfi-1) #:select (filter))
   #:export (tag-link reindex-tags))
 
 (define (tag-link tagname)
@@ -43,10 +44,10 @@
      (lambda (post)
        (for-each
         (lambda (cat)
-          (hash-push! hash cat (assq-ref post 'key)))
+          (hash-push! hash cat (post-key post)))
         (post-tags post)))
      posts)
     hash))
 
 (define (reindex-tags old-index index)
-  (compute-tags (assq-ref index 'posts)))
+  (compute-tags (filter post-published? (assq-ref index 'posts))))
