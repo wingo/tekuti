@@ -43,3 +43,17 @@
 (define *title* "My blog")
 (define *subtitle* "Just a blog, ok")
 (define *name* "Joe Schmo")
+
+(define *character-entities* '((agrave . 224)
+                               (laquo . 171)
+                               (mdash . 8212)
+                               (nbsp . 160)
+                               (raquo . 187)
+                               (uacute . 250)))
+(use-modules (sxml ssax-simple) (sxml unicode))
+(for-each
+ (lambda (pair)
+   (set! ssax:predefined-parsed-entities
+         (assoc-set! ssax:predefined-parsed-entities
+                     (car pair) (unichar->utf-8 (cdr pair)))))
+ *character-entities*)
