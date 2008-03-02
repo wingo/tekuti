@@ -210,7 +210,20 @@
   (not-implemented request index))
 
 (define (page-show-tag request index tag)
-  (not-implemented request index))
+  (let* ((tags (assq-ref index 'tags))
+         (posts (map (lambda (key)
+                       (post-from-key (assq-ref index 'master) key))
+                     (hash-ref tags tag '()))))
+    (if (pair? posts)
+        (rcons* request
+                'title (string-append "posts tagged \"" tag "\"")
+                'body `((h2 "posts tagged \"" ,tag "\"")
+                        ,@(map (lambda (post) `(p ,(post-link post)))
+                               posts)))
+        (rcons* request
+                'status 404
+                'body `((h2 "Unknown tag " ,tag)
+                        (p "No posts were found tagged as \"" ,tag "\"."))))))
 
 (define (page-debug request index)
   (rcons* request
