@@ -39,7 +39,7 @@
             post-editing-form
             sidebar-ul main-sidebar tag-cloud
             post-link admin-post-link
-            show-post
+            show-post with-authentication
             atom-header atom-entry))
 
 (define (relurl . paths)
@@ -61,13 +61,26 @@
                                  (string-append "admin/modify-post/"
                                                 (url:encode (post-key post)))
                                  "admin/new-post"))))
-         (p "title: "
-            (input (@ (name "title") (type "text")
-                      (value ,(if post (post-title post) "")))))
-         (div (textarea (@ (name "body") (rows "20") (cols "80"))
+         (p (input (@ (name "title") (type "text")
+                      (value ,(if post (post-title post) ""))))
+            (label (@ (for "title")) " <- title"))
+         (p (input (@ (name "tags") (type "text")
+                      (value ,(if post
+                                  (string-join (post-tags post) ", ")
+                                  ""))))
+            (label (@ (for "tags")) " <- tags, comma-separated"))
+         (p (input (@ (name "date") (type "text")
+                      (value ,(if (and=> post post-published?)
+                                  (timestamp->rfc822-date (post-timestamp post))
+                                  ""))))
+            (label (@ (for "date")) " <- date"))
+         (div (textarea (@ (name "body") (rows "20") (cols "60"))
                         ,(if post (post-raw-content post) "")))
-         (input (@ (type "submit")
-                   (value ,(if post "edit post" "new post"))))))
+         (input (@ (type "submit") (name "status")
+                   (value "publish")))
+         " "
+         (input (@ (type "submit") (name "status")
+                   (value "draft")))))
 
 (define (sidebar-ul body)
   `(div (@ (id "menu"))
@@ -76,7 +89,7 @@
 ;; double-encoding is a hack to trick apache
 (define (admin-post-link post)
   (rellink (string-append "admin/posts/" (url:encode (post-key post)))
-           (post-title 'title)))
+           (post-title post)))
 
 (define (post-url post . tail)
   (apply relurl "archives/" (url:decode (post-key post)) tail))
@@ -184,6 +197,15 @@
                 )))
      (li (h2 "tags " ,(rellink "tags/" ">>"))
          ,(tag-cloud index)))))
+
+(define (with-authentication request thunk)
+  (if (request-authenticated? request)
+      (thunk)
+      (rcons* (rpush 'output-headers
+                     '("WWW-Authenticate" . "Basic realm=\"Tekuti\"")
+                     request)
+              'status 401
+              'body `((p "Authentication required, yo")))))
 
 (define (atom-header server-name last-modified)
   (define (relurl tail)

@@ -40,7 +40,10 @@
             post-tags post-timestamp post-key post-published?
             post-comments-open? post-comments
             post-sxml-content post-readable-date post-n-comments
+            post-raw-content
             post-title
+
+            make-new-post
 
             all-published-posts
 
@@ -123,6 +126,57 @@
 
 (define (post-n-comments post)
   (length (git-ls-tree (string-append (assq-ref post 'sha1) ":comments") #f)))
+
+(define (string-split/trimming string delimiter)
+  (map string-trim-both (string-split string delimiter)))
+
+(define space-to-dash (s///g " +" "-"))
+(define remove-extraneous (s///g "[^a-z-]+" ""))
+
+(define (title->name title)
+  (remove-extraneous (space-to-dash (string-downcase title))))
+
+;; some verification necessary...
+(define (make-new-post post-data)
+  (define (make-post-key date name)
+    (url:encode (string-append (date->string date "~Y/~m/~d/")
+                               (url:encode name))))
+  (let ((title (assoc-ref post-data "title"))
+        (body (assoc-ref post-data "body"))
+        (tags (assoc-ref post-data "tags"))
+        (date (assoc-ref post-data "date"))
+        (status (assoc-ref post-data "status")))
+    (let ((timestamp (if (string-null? date)
+                         (time-second (current-time))
+                         (rfc822-date->timestamp date))))
+      (let ((metadata (with-output-to-blob
+                       (for-each
+                        (lambda (pair)
+                          (format #t "~a: ~a\n" (car pair) (cdr pair)))
+                        `((timestamp . ,timestamp)
+                          (tags . ,tags)
+                          (status . ,status)
+                          (title . ,title)
+                          (name . ,(title->name title))))))
+            (content (with-output-to-blob (display body)))
+            (key (make-post-key (timestamp->date timestamp)
+                                (title->name title)))
+            (message (format #f "new post: \"~a\"" title)))
+        (post-from-key
+         (git-update-ref
+          "refs/heads/master"
+          (lambda (master)
+            (git-commit-tree (munge-tree master
+                                         `(((,key)
+                                            . ("metadata" ,metadata blob))
+                                           ((,key)
+                                            . ("content" ,content blob)))
+                                         '()
+                                         '())
+                             master message #f))
+          5)
+         key
+         #t)))))
 
 (define (all-posts master)
   (map (lambda (pair)

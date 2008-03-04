@@ -77,8 +77,8 @@
              (assq-ref index 'posts)
              n))
      (rcons* request
-             'body `(,(sidebar-ul `((li (h2 ,(rellink "admin/posts" "posts"))
-                                        (ul ,@(post-links 10)))
+             'body `(,(sidebar-ul `((li (h2 "posts " ,(rellink "admin/posts" ">>"))
+                                        (ul ,@(post-links 5)))
                                     (li (h2 "recent comments")
                                         (p "ain't got none"))))
                      (h2 "new post")
@@ -100,7 +100,7 @@
   (with-authentication
    request
    (lambda ()
-     (let ((post (post-from-key (assq-ref index 'master) key)))
+     (let ((post (post-from-key (assq-ref index 'master) key #t)))
        (rcons* request
                'body `((h1 ,(post-title post))
                        ,(post-editing-form post)))))))
@@ -109,20 +109,22 @@
   (with-authentication
    request
    (lambda ()
-     (let ((form-data (request-form-data request)))
+     (let ((post (make-new-post (request-form-data request))))
        (rcons* request
                'status 201              ; created
-               'output-headers (acons "Location" *public-url-base*
-                                      (rref request 'output-headers '()))
-               'body `((h1 "Created")
-                       (p "Created new post: " ,(assoc-ref form-data "title"))
-                       (pre ,(assoc-ref form-data "body"))))))))
+               ;; perhaps set Location:
+               'body `((h1 ,(post-title post))
+                       ,(post-editing-form post)))))))
 
 (define (page-admin-modify-post request index key)
   (with-authentication
    request
    (lambda ()
-     (not-implemented request index))))
+     (let ((post (modify-post key (request-form-data request))))
+       (rcons* 'status 303
+               'body `((h1 ,(post-title post))
+                       ,(post-editing-form post)))))))
+     
 (define page-delete-comment not-implemented)
 (define page-delete-post not-implemented)
 

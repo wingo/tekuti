@@ -31,7 +31,8 @@
   #:use-module (tekuti config)
   #:use-module (scheme kwargs)
   #:use-module (match-bind)
-  #:use-module ((srfi srfi-1) #:select (filter-map partition))
+  #:use-module ((srfi srfi-1) #:select (filter-map partition
+                                        delete-duplicates))
   #:use-module (srfi srfi-11) ; let-values
   #:use-module (srfi srfi-34)
   #:use-module (srfi srfi-35)
@@ -235,10 +236,11 @@
                                (filter-map level-down dchange))
                    'tree)))
           (else dent)))
-       (append (filter-map (lambda (x)
-                             (and (not (assoc (caar x) dents))
-                                  (list (caar x) #f 'tree)))
-                           dadd)
+       (append (delete-duplicates
+                (filter-map (lambda (x)
+                              (and (not (assoc (caar x) dents))
+                                   (list (caar x) #f 'tree)))
+                            dadd))
                dents))))))
     
 (define (parse-commit commit)

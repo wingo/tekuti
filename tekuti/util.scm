@@ -35,6 +35,7 @@
             call-with-temp-file emailish? urlish?
             date-increment date-comparator date-before? date-after? compose1
             rfc822-date->timestamp timestamp->rfc822-date timestamp->atom-date
+            timestamp->date
             list-intersperse with-backtrace with-time-debugging define-memoized))
 
 (define (emailish? x)
@@ -244,11 +245,14 @@
                    (string->date str "~a, ~d ~b ~Y ~H:~M:~S GMT")))
      (date-zone-offset (current-date))))
 
+(define (timestamp->date timestamp)
+  (time-utc->date (make-time time-utc 0 timestamp) 0))
+
 (define (timestamp->atom-date timestamp)
-  (date->string (time-utc->date (make-time time-utc 0 timestamp) 0)
+  (date->string (timestamp->date timestamp)
                 "~Y-~m-~dT~H:~M:~SZ"))
 
 (define (timestamp->rfc822-date timestamp)
-  (date->string (time-utc->date (make-time time-utc 0 timestamp) 0)
+  (date->string (timestamp->date timestamp)
                 "~a, ~d ~b ~Y ~H:~M:~S GMT"))
 

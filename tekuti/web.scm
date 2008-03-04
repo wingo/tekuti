@@ -38,6 +38,7 @@
 (define *status-names*
   '((200 . "OK")
     (201 . "Created")
+    (303 . "See Other")
     (304 . "Not Modified")
     (401 . "Unauthorized")
     (404 . "Not Found")

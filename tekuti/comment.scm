@@ -128,7 +128,9 @@
                     (author_email . ,email)
                     (author_url . ,url)))
                  (display "\n")
-                 (display content))))
+                 (display content)))
+          (message (format #f "comment on \"~a\" by ~a" (post-title post)
+                           author)))
       (git-update-ref
        "refs/heads/master"
        (lambda (master)
@@ -137,5 +139,5 @@
                                          . (,sha1 ,sha1 blob)))
                                       '()
                                       '())
-                          master "new comment" #f))
+                          master message #f))
        5))))
