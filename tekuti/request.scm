@@ -42,6 +42,16 @@
         (cdr pair)
         default)))
 
+(define (parse-www-form-urlencoded str)
+  (map
+   (lambda (piece)
+     (let ((equals (string-index piece #\=)))
+       (if equals
+           (cons (url:decode (substring piece 0 equals))
+                 (url:decode (substring piece (1+ equals))))
+           (cons (url:decode piece) ""))))
+   (string-split str #\&)))
+
 (define *request-initializers*
   `((path . ,(lambda (r)
                (let ((private-url-path (url:path-split *private-url-base*))
@@ -54,6 +64,11 @@
                    tail))))
     (path-str . ,(lambda (r)
                    (url:path-join (rref r 'path '()))))
+    (query . ,(lambda (r)
+                (or (and=> (url:query-part
+                            (header-ref (rref r 'headers '()) "url" ""))
+                           parse-www-form-urlencoded)
+                    '())))
     (method . ,(lambda (r)
                  (header-ref (rref r 'headers '()) "method" "GET")))))
 
@@ -64,14 +79,7 @@
         (let ((content-type (assoc-ref headers "content-type")))
           (cond
            ((equal? content-type "application/x-www-form-urlencoded")
-            (map
-             (lambda (piece)
-               (let ((equals (string-index piece #\=)))
-                 (if equals
-                     (cons (url:decode (substring piece 0 equals))
-                           (url:decode (substring piece (1+ equals))))
-                     (cons (url:decode piece) ""))))
-             (string-split post-data #\&)))
+            (parse-www-form-urlencoded post-data))
            (else
             (error "bad content-type" content-type)))))))
 
@@ -171,13 +179,6 @@
               `((equal? ,path-var ',pat) ,proc))))))
     `(let ((,path-var ,path))
        (cond ,@(map process-clause clauses)))))
-
-(define (foldn kons n knil values)
-  (if (null? values)
-      knil
-      (foldn kons n
-             (apply kons knil (list-head values n))
-             (list-tail values n))))
 
 (define (rcons*-fold request . keys-and-procs)
   (foldn (lambda (request k proc)

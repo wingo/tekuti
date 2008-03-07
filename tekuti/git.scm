@@ -33,7 +33,6 @@
   #:use-module (match-bind)
   #:use-module ((srfi srfi-1) #:select (filter-map partition
                                         delete-duplicates))
-  #:use-module (srfi srfi-11) ; let-values
   #:use-module (srfi srfi-34)
   #:use-module (srfi srfi-35)
   #:export (&git-condition git-condition? git-condition-argv
@@ -41,9 +40,9 @@
 
             git git* ensure-git-repo git-ls-tree git-ls-subdirs
             git-mktree git-rev-parse git-hash-object git-update-ref
-            git-commit-tree
+            git-commit-tree git-rev-list git-revert
 
-            munge-tree parse-commit commit-utc-timestamp
+            munge-tree munge-tree1 parse-commit commit-utc-timestamp
             
             with-output-to-blob with-input-from-blob))
 
@@ -71,20 +70,18 @@
       (apply pk args)
       (car (last-pair args))))
 
-(define (run-git env input-file args)
+(define (run env input-file args)
   (define (prepend-env args)
     (if (null? env)
         args
         (cons "/usr/bin/env" (append env args))))
-  (define (prepend-git args)
-    (cons* *git* "--bare" args))
   (define (redirect-input args)
     (if input-file
         (list "/bin/sh" "-c"
               (string-append (string-join (map shell:quote args) " ")
                              "<" input-file))
         args))
-  (let* ((real-args (trc (redirect-input (prepend-env (prepend-git args)))))
+  (let* ((real-args (trc (redirect-input (prepend-env args))))
          (pipe (apply open-pipe* OPEN_READ real-args))
          (output (read-delimited "" pipe))
          (ret (close-pipe pipe)))
@@ -102,8 +99,8 @@
        input
        (lambda (tempname)
          (trc input)
-         (run-git env tempname args)))
-      (run-git env #f args)))
+         (run env tempname (cons* *git* "--bare" args))))
+      (run env #f (cons* *git* "--bare" args))))
 
 (define (git . args)
   (git* args))
@@ -127,36 +124,58 @@
         (chdir d))))
 
 (define (git-ls-tree treeish path)
-  (or (false-if-git-error
-       (match-lines (git "ls-tree" treeish (or path "."))
-                    "^(.+) (.+) (.+)\t(.+)$" (_ mode type object name)
-                    ;; reversed for assoc
-                    (list name object (string->symbol type))))
+  (or (and treeish
+           (false-if-git-error
+            (match-lines (git "ls-tree" treeish (or path "."))
+                         "^(.+) (.+) (.+)\t(.+)$" (_ mode type object name)
+                         ;; reversed for assoc
+                         (list name object (string->symbol type)))))
       '()))
 
 (define (git-ls-subdirs treeish path)
-  (or (false-if-git-error
-       (match-lines (git "ls-tree" treeish (or path "."))
-                    "^(.+) tree (.+)\t(.+)$" (_ mode object name)
-                    (cons name object)))
+  (or (and treeish
+           (false-if-git-error
+            (match-lines (git "ls-tree" treeish (or path "."))
+                         "^(.+) tree (.+)\t(.+)$" (_ mode object name)
+                         (cons name object))))
       '()))
 
 (define (git-mktree alist)
-  (string-trim-both
-   (git* '("mktree")
-         #:input (string-join
-                  (map (lambda (l)
-                         (format #f
-                                 (if (or (null? (cddr l))
-                                         (equal? (caddr l) 'blob))
-                                     "100644 blob ~a\t~a"
-                                     "040000 tree ~a\t~a")
-                                 (cadr l) (car l)))
-                       alist)
-                  "\n" 'suffix))))
+  (if (null? alist)
+      #f
+      (string-trim-both
+       (git* '("mktree")
+             #:input (string-join
+                      (map (lambda (l)
+                             (format #f
+                                     (if (or (null? (cddr l))
+                                             (equal? (caddr l) 'blob))
+                                         "100644 blob ~a\t~a"
+                                         "040000 tree ~a\t~a")
+                                     (cadr l) (car l)))
+                           alist)
+                      "\n" 'suffix)))))
 
 (define (git-rev-parse rev)
   (string-trim-both (git "rev-parse" rev)))
+
+(define (git-rev-list rev n)
+  (let lp ((lines (string-split
+                   (git "rev-list" "--pretty=format:%ct %s"
+                        "-n" (number->string n) rev) #\newline))
+           (ret '()))
+    (if (or (null? lines)
+            (and (null? (cdr lines)) (string-null? (car lines))))
+        (reverse ret)
+        (lp (cddr lines)
+            (let ((line1 (car lines)) (line2 (cadr lines)))
+              (match-bind
+               "^commit (.*)$" line1 (_ sha1)
+               (match-bind
+                "^([0-9]+) (.*)$" line2 (_ ts subject)
+                (cons `(,sha1 ,(string->number ts) ,subject) ret)
+                (error "bad line2" line2))
+               (error "bad line1" line1)))))))
 
 (define (git-hash-object contents)
   (string-trim-both
@@ -190,59 +209,107 @@
 ;;; utilities
 ;;; 
 
-(define (munge-tree treeish add remove change)
-  (define (local? x) (null? (car x)))
-  (define (assert-added-files-not-present names dents)
-    (for-each
-     (lambda (dent)
-       (if (member (car dent) names)
-           (error "file already added" dent)))
-     dents))
-  (define (assert-referenced-files-present names dents)
-    (for-each
-     (lambda (name)
-       (if (not (assoc name dent-names))
-           (error "file already removed" name)))
-     names))
-  (let-values (((dents) (if treeish (git-ls-tree treeish #f) '()))
-               ((ladd dadd) (partition local? add))
-               ((lremove dremove) (partition local? remove))
-               ((lchange dchange) (partition local? change)))
-    (assert-added-files-not-present (map cadr ladd) dents)
-    (assert-referenced-files-present
-     (append (map cdr lremove) (map caar lchange)) dents)
-    ; (trc 'munge-tree treeish add remove change)
+;; unused.
+(define (patch-blob sha1 patch)
+  (call-with-temp-file
+   (git "cat-file" "blob" sha1)
+   (lambda (orig)
+     (run '() patch (list "patch" "-N" "-s" "-u" "-r" "/dev/null" orig))
+     (with-output-to-blob
+       (display
+        (call-with-input-file (orig)
+          (read-delimited "" port)))))))
+
+;; could leave stray comments if the post directory changes. but this is
+;; probably the best that we can do, given that git does not track
+;; directory renames.
+(define (git-commit-reverse-operations sha1)
+  (with-input-from-string (git "diff-tree" "-R" "-r" sha1)
+    (lambda ()
+      (read-line) ;; throw away the header
+      (let lp ((ops '()))
+        (let ((line (read-line)))
+          (if (eof-object? line)
+              ops
+              (match-bind
+               "^:([0-9]+) ([0-9]+) ([0-9a-f]+) ([0-9a-f]+) (.)\t(.*)$"
+               line (_ mode1 mode2 ob1 ob2 op path)
+               (let ((head (let ((d (dirname path)))
+                                  (if (string=? d ".") '()
+                                      (string-split d #\/))))
+                     (tail (basename path)))
+                 (lp
+                  (case (string-ref op 0)
+                    ((#\D) (cons `(delete ,head (,tail))
+                                 ops))
+                    ((#\A) (cons `(create ,head (,tail ,ob2 blob))
+                                 ops))
+                    ((#\M) (cons* `(delete ,head (,tail))
+                                  `(create ,head (,tail ,ob2 blob))
+                                  ops)))))
+               (error "crack line" line))))))))
+
+(define (git-revert ref sha1)
+  (let ((ops (git-commit-reverse-operations sha1)))
+    (git-update-ref ref
+                    (lambda (master)
+                      (git-commit-tree (munge-tree master ops)
+                                       master "revert change" #f))
+                    5)))
+
+(define (munge-tree1-local dents command arg)
+  (define (command-error why)
+    (error "munge-tree1-local error" why command arg))
+  (let ((dent (assoc (car arg) dents)))
     (git-mktree
-     (append
-      (map cdr ladd)
-      (filter-map
-       (lambda (dent)
-         (cond
-          ((member (car dent) (map cdr lremove))
-           #f)
-          ((member (car dent) (map cadr lchange))
-           (cdr lchange))
-          ((and (eq? (caddr dent) 'tree)
-                (member (car dent)
-                        (map caar (append dadd dremove dchange))))
-           (let ((level-down (lambda (x)
-                               (if (equal? (caar x) (car dent))
-                                   (cons (cdar x) (cdr x))
-                                   #f))))
-             (list (car dent)
-                   (munge-tree (cadr dent)
-                               (filter-map level-down dadd)
-                               (filter-map level-down dremove)
-                               (filter-map level-down dchange))
-                   'tree)))
-          (else dent)))
-       (append (delete-duplicates
-                (filter-map (lambda (x)
-                              (and (not (assoc (caar x) dents))
-                                   (list (caar x) #f 'tree)))
-                            dadd))
-               dents))))))
-    
+     (case command
+       ((create) (if dent
+                     (command-error 'file-present)
+                     (cons arg dents)))
+       ((delete) (if dent
+                     (delq dent dents)
+                     (command-error 'file-not-present)))
+       ((rename) (if dent
+                     (acons (cadr arg) (cdr dent) (delq dent dents))
+                     (command-error 'file-not-present)))
+       (else (command-error 'unrecognized))))))
+
+(define (munge-tree1-recursive dents command ldir rdir arg)
+  (define (command-error why)
+    (error "munge-tree1-recursive error" why command dir arg))
+  (let ((dent (assoc ldir dents)))
+    (if (and dent (not (eq? (caddr dent) 'tree)))
+        (command-error 'not-a-tree))
+    (let ((subtree (and=> dent cadr))
+          (other-dents (if dent (delq dent dents) dents)))
+      (let ((new (case command
+                   ((create)
+                    (munge-tree1 subtree command rdir arg))
+                   ((delete rename)
+                    (if subtree
+                        (munge-tree1 subtree command rdir arg)
+                        (command-error 'file-not-present)))
+                   (else (command-error 'unrecognized)))))
+        (git-mktree (if new
+                        (cons (list ldir new 'tree) other-dents)
+                        other-dents))))))
+
+(define (munge-tree1 treeish command dir arg)
+  (let ((dents (git-ls-tree treeish #f)))
+    (if (null? dir)
+        (munge-tree1-local dents command arg)
+        (munge-tree1-recursive dents command (car dir) (cdr dir) arg))))
+
+;; (munge-tree sha1 ((create (key comments) (name sha1 blob))
+;;                   (delete (foo bar) (name))
+;;                   (rename (baz borky) (from to))))
+(define (munge-tree treeish operations)
+  (if (null? operations)
+      treeish
+      (let ((op (car operations)))
+        (munge-tree (munge-tree1 treeish (car op) (cadr op) (caddr op))
+                    (cdr operations)))))
+
 (define (parse-commit commit)
   (let ((text (git "cat-file" "commit" commit)))
     (match-bind

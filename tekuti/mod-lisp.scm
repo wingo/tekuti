@@ -109,7 +109,7 @@
          (fd (car pair))
          (sockaddr (cdr pair))
          (new-index (maybe-reindex index)))
-    (connection-received (car pair) (cdr pair) (cdr new-index))
+    (connection-received fd sockaddr (cdr new-index))
     (inner-loop socket new-index)))
 
 (define (event-loop)

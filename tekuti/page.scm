@@ -41,8 +41,9 @@
             page-admin-post
             page-admin-new-post
             page-admin-modify-post 
-            page-admin-delete-comment 
-            page-admin-delete-post 
+            page-admin-changes 
+            page-admin-change
+            page-admin-revert-change
             page-index 
             page-show-post 
             page-new-comment
@@ -76,11 +77,16 @@
                `(li ,(admin-post-link post)))
              (assq-ref index 'posts)
              n))
+     (define (recent-changes n)
+       (map (lambda (rev)
+              `(li ,(rellink (string-append "admin/changes/" (car rev))
+                             (caddr rev))))
+            (git-rev-list "refs/heads/master" n)))
      (rcons* request
              'body `(,(sidebar-ul `((li (h2 "posts " ,(rellink "admin/posts" ">>"))
                                         (ul ,@(post-links 5)))
-                                    (li (h2 "recent comments")
-                                        (p "ain't got none"))))
+                                    (li (h2 "changes" ,(rellink "admin/changes" ">>"))
+                                        (ul ,(recent-changes 5)))))
                      (h2 "new post")
                      ,(post-editing-form #f))))))
 
@@ -110,23 +116,60 @@
    request
    (lambda ()
      (let ((post (make-new-post (request-form-data request))))
-       (rcons* request
-               'status 201              ; created
-               ;; perhaps set Location:
-               'body `((h1 ,(post-title post))
-                       ,(post-editing-form post)))))))
+       (rcons* (admin-post-redirect request post)
+               'body `((p "redirecting...")))))))
 
 (define (page-admin-modify-post request index key)
   (with-authentication
    request
    (lambda ()
      (let ((post (modify-post key (request-form-data request))))
-       (rcons* 'status 303
-               'body `((h1 ,(post-title post))
-                       ,(post-editing-form post)))))))
+       (rcons* (admin-post-redirect request post)
+               'body `((p "redirecting...")))))))
      
-(define page-delete-comment not-implemented)
-(define page-delete-post not-implemented)
+(define (page-admin-changes request index) 
+  (with-authentication
+   request
+   (lambda ()
+     (let ((revs (git-rev-list (or (assoc-ref (rref request 'query '())
+                                              "start")
+                                   "refs/heads/master")
+                               10)))
+       (rcons* request
+               'body `((h2 "recent changes")
+                       ,@(map (lambda (rev)
+                                `(div (h3 ,(rellink (string-append "admin/changes/"
+                                                                   (car rev))
+                                                    (caddr rev)))
+                                      ,(timestamp->rfc822-date (cadr rev))))
+                              revs)
+                       (h3 ,(rellink (string-append "admin/changes/?start=" (caar (last-pair revs)))
+                                     "more" ))))))))
+
+(define (page-admin-change request index sha1) 
+  (with-authentication
+   request
+   (lambda ()
+     (let ((commit (parse-commit sha1)))
+       (rcons* request
+               'body `((h2 ,(assq-ref commit 'message))
+                       (p "Committed on "
+                          ,(timestamp->rfc822-date
+                            ;; needlessly goes to git again...
+                            (commit-utc-timestamp sha1)))
+                       (pre ,(git "diff-tree" "-M" "-p" sha1))
+                       (form (@ (action ,(relurl "admin/revert-change/" sha1))
+                                (method "POST"))
+                             (input (@ (type "submit") (value "Undo this change"))))))))))
+
+
+(define (page-admin-revert-change request index sha1)
+  (with-authentication
+   request
+   (lambda ()
+     (let ((new-master (git-revert "refs/heads/master" sha1)))
+       (rcons* (redirect request (relurl "admin"))
+               'body `((h3 "Change reverted")))))))
 
 (define (page-index request index)
   (rcons* request
@@ -158,13 +201,12 @@
                   (rcons* request
                           'body `((p "Bad post data: " ,(pk reason))))))
             (else
-             (let ((comment (make-new-comment post data)))
+             (let ((comment (make-new-comment (post-key post) (post-title post)
+                                              data)))
                ;; nb: at this point, `post' is out-of-date
-               (rcons* request
+               (rcons* (redirect request (post-url post "#comments"))
                        'title "comment posted"
-                       'body `((p "Comment posted, thanks.")
-                               ;; fixme: show the post directly; or a redirect?
-                               (p "Back to the post: " ,(post-link post)))))))))
+                       'body `((p "Comment posted, thanks."))))))))
      (else
       (page-not-found request index)))))
 

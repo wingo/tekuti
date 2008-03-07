@@ -34,11 +34,11 @@
   #:use-module (tekuti request)
   #:use-module (srfi srfi-19)
   #:use-module (scheme kwargs)
-  #:export (relurl rellink
+  #:export (relurl rellink redirect post-url
             published-posts
             post-editing-form
             sidebar-ul main-sidebar tag-cloud
-            post-link admin-post-link
+            post-link admin-post-link admin-post-redirect
             show-post with-authentication
             atom-header atom-entry))
 
@@ -56,40 +56,47 @@
                n))
 
 (define (post-editing-form post)
-  `(form (@ (method "POST")
-            (action ,(relurl (if post
-                                 (string-append "admin/modify-post/"
-                                                (url:encode (post-key post)))
-                                 "admin/new-post"))))
-         (p (input (@ (name "title") (type "text")
-                      (value ,(if post (post-title post) ""))))
-            (label (@ (for "title")) " <- title"))
-         (p (input (@ (name "tags") (type "text")
-                      (value ,(if post
-                                  (string-join (post-tags post) ", ")
-                                  ""))))
-            (label (@ (for "tags")) " <- tags, comma-separated"))
-         (p (input (@ (name "date") (type "text")
-                      (value ,(if (and=> post post-published?)
-                                  (timestamp->rfc822-date (post-timestamp post))
-                                  ""))))
-            (label (@ (for "date")) " <- date"))
-         (div (textarea (@ (name "body") (rows "20") (cols "60"))
-                        ,(if post (post-raw-content post) "")))
-         (input (@ (type "submit") (name "status")
-                   (value "publish")))
-         " "
-         (input (@ (type "submit") (name "status")
-                   (value "draft")))))
+  `(div
+    (form (@ (method "POST")
+             (action ,(relurl (if post
+                                  (string-append "admin/modify-post/"
+                                                 (url:encode (post-key post)))
+                                  "admin/new-post"))))
+          (p (input (@ (name "title") (type "text")
+                       (value ,(if post (post-title post) ""))))
+             (label (@ (for "title")) " <- title"))
+          (p (input (@ (name "tags") (type "text")
+                       (value ,(if post
+                                   (string-join (post-tags post) ", ")
+                                   ""))))
+             (label (@ (for "tags")) " <- tags, comma-separated"))
+          (p (input (@ (name "date") (type "text")
+                       (value ,(if (and=> post post-published?)
+                                   (timestamp->rfc822-date (post-timestamp post))
+                                   ""))))
+             (label (@ (for "date")) " <- date (empty == now)"))
+          (div (textarea (@ (name "body") (rows "20") (cols "60"))
+                         ,(if post (post-raw-content post) "")))
+          (input (@ (type "submit") (name "status")
+                    (value "publish")))
+          " "
+          (input (@ (type "submit") (name "status")
+                    (value "draft"))))
+    ,@(if post
+          `((h2 "preview")
+            ,(show-post post #f))
+          '())))
 
 (define (sidebar-ul body)
   `(div (@ (id "menu"))
         (ul ,@body)))
 
 ;; double-encoding is a hack to trick apache
+(define (admin-post-url post)
+  (relurl "admin/posts/" (url:encode (post-key post))))
+
 (define (admin-post-link post)
-  (rellink (string-append "admin/posts/" (url:encode (post-key post)))
-           (post-title post)))
+  `(a (@ (href ,(admin-post-url post))) ,(post-title post)))
 
 (define (post-url post . tail)
   (apply relurl "archives/" (url:decode (post-key post)) tail))
@@ -161,6 +168,13 @@
     ,@(if comments?
           (list (post-sxml-comments post))
           '())))
+
+(define (redirect request location)
+  (rpush 'output-headers (cons "Location" location)
+         (rcons 'status 302 request)))
+
+(define (admin-post-redirect request post)
+  (redirect request (admin-post-url post)))
 
 ;; fixme: borks in the no-tags case; ugly code
 (define (tag-cloud index)

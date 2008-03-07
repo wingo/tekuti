@@ -114,7 +114,7 @@
 
 (define de-newline (s///g "[\n\r]" " "))
 
-(define (make-new-comment post post-data)
+(define (make-new-comment key title post-data)
   (let ((content (assoc-ref post-data "comment"))
         (author (assoc-ref post-data "author"))
         (email (assoc-ref post-data "email"))
@@ -129,15 +129,13 @@
                     (author_url . ,url)))
                  (display "\n")
                  (display content)))
-          (message (format #f "comment on \"~a\" by ~a" (post-title post)
-                           author)))
+          (message (format #f "comment on \"~a\" by ~a" title author)))
       (git-update-ref
        "refs/heads/master"
        (lambda (master)
-         (git-commit-tree (munge-tree master
-                                      `(((,(assq-ref post 'key) "comments")
-                                         . (,sha1 ,sha1 blob)))
-                                      '()
-                                      '())
+         (git-commit-tree (munge-tree1 master
+                                       'create
+                                       (list key "comments")
+                                       (list sha1 sha1 'blob))
                           master message #f))
        5))))

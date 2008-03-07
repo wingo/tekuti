@@ -31,11 +31,11 @@
   #:use-module (srfi srfi-19)
   #:export (expanduser match-lines dbg unwind-protect dbg dsu-sort
             hash-push! list-has-length? list-head-match mapn filter-mapn
-            take-max read-hash write-hash shell:quote
+            take-max read-hash write-hash shell:quote foldn
             call-with-temp-file emailish? urlish?
             date-increment date-comparator date-before? date-after? compose1
             rfc822-date->timestamp timestamp->rfc822-date timestamp->atom-date
-            timestamp->date
+            timestamp->date string-split/trimming
             list-intersperse with-backtrace with-time-debugging define-memoized))
 
 (define (emailish? x)
@@ -49,6 +49,14 @@
               x (_ . args)
               x
               #f))
+
+;; bad name relative to mapn...
+(define (foldn kons n knil values)
+  (if (null? values)
+      knil
+      (foldn kons n
+             (apply kons knil (list-head values n))
+             (list-tail values n))))
 
 (define (call-with-temp-file contents proc)
   (let* ((template (string-copy "/tmp/tekutiXXXXXX"))
@@ -87,6 +95,20 @@
                     (cons ,expr ,seed)
                     ,seed))
       '() (string-split ,string #\newline))))
+
+;; clause := ((pat args) body...)
+(define-macro (match-case string . clauses)
+  (let ((str (gensym)))
+    `(let ((,str ,string))
+       ,(let lp ((in clauses))
+          (let ((clause (car in)))
+            (if (eq? (car clause) 'else)
+                `(begin ,@(cdr clause))
+                `(match-bind ,(caar clause) ,str ,(cadar clause)
+                             (begin ,@(cdr clause))
+                             ,(if (null? (cdr in))
+                                  #f
+                                  (lp (cdr in))))))))))
 
 (define (dbg fmt . args)
   (apply format (current-error-port) fmt args))
@@ -239,6 +261,9 @@
       (let ((other (apply compose1 procs)))
         (lambda (x)
           (proc (other x))))))
+
+(define (string-split/trimming string delimiter)
+  (map string-trim-both (string-split string delimiter)))
 
 (define (rfc822-date->timestamp str)
   (+ (time-second (date->time-utc

@@ -94,9 +94,9 @@
    ;; would be fine to have e.g. (DELETE admin posts posts-key!), but
    ;; web browsers don't handle that
    ((POST admin modify-post post-key!) page-admin-modify-post)
-   ((POST admin delete-comment comment-key!) page-admin-delete-comment)
-   ((POST admin delete-post post-key!) page-admin-delete-post)
-    
+   ((GET admin changes) page-admin-changes)
+   ((GET admin changes sha1!) page-admin-change)
+   ((POST admin revert-change sha1!) page-admin-revert-change)
    ((GET) page-index)
    ((GET archives year? month? day?) page-archives)
    ((GET archives year! month! day! post!) page-show-post)

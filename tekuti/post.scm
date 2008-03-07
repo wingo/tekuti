@@ -43,7 +43,7 @@
             post-raw-content
             post-title
 
-            make-new-post
+            make-new-post modify-post
 
             all-published-posts
 
@@ -55,7 +55,7 @@
 
 (define *post-spec*
   `((timestamp . ,string->number)
-    (tags . ,(lambda (v) (map string-trim-both (string-split v #\,))))
+    (tags . ,(lambda (v) (string-split/trimming v #\,)))
     (title . ,identity)))
 
 (define (post-from-tree encoded-name sha1)
@@ -127,56 +127,73 @@
 (define (post-n-comments post)
   (length (git-ls-tree (string-append (assq-ref post 'sha1) ":comments") #f)))
 
-(define (string-split/trimming string delimiter)
-  (map string-trim-both (string-split string delimiter)))
+(define (munge-post old-key parsed)
+  (let ((metadata (with-output-to-blob
+                   (for-each
+                    (lambda (k)
+                      (format #t "~a: ~a\n" k (assq-ref parsed k)))
+                    '(timestamp tags status title name))))
+        (content (with-output-to-blob (display (assq-ref parsed 'body))))
+        (key (assq-ref parsed 'key))
+        (message (format #f "~a: \"~a\"" 
+                         (if old-key "post modified" "new post")
+                         (assq-ref parsed 'title))))
+    (define (maybe-rename ops)
+      (if (and old-key (not (equal? old-key key)))
+          (cons `(rename () (,old-key ,key)) ops)
+          ops))
+    (define (maybe-clear ops)
+      (if old-key
+          (append `((delete (,key) ("content"))
+                    (delete (,key) ("metadata")))
+                  ops)
+          ops))
+    (let ((ops (maybe-rename
+                (maybe-clear
+                 `((create (,key) ("metadata" ,metadata blob))
+                   (create (,key) ("content" ,content blob)))))))
+      (post-from-key
+       (git-update-ref "refs/heads/master"
+                       (lambda (master)
+                         (git-commit-tree (munge-tree master ops)
+                                          master message #f))
+                       5)
+       key #t))))
 
-(define space-to-dash (s///g " +" "-"))
+(define space-to-dash (s///g " " "-"))
 (define remove-extraneous (s///g "[^a-z-]+" ""))
+(define collapse (s///g "-+" "-"))
 
 (define (title->name title)
-  (remove-extraneous (space-to-dash (string-downcase title))))
+  (collapse (remove-extraneous (space-to-dash (string-downcase title)))))
 
 ;; some verification necessary...
-(define (make-new-post post-data)
-  (define (make-post-key date name)
-    (url:encode (string-append (date->string date "~Y/~m/~d/")
-                               (url:encode name))))
+(define (parse-post-data post-data)
   (let ((title (assoc-ref post-data "title"))
         (body (assoc-ref post-data "body"))
         (tags (assoc-ref post-data "tags"))
-        (date (assoc-ref post-data "date"))
-        (status (assoc-ref post-data "status")))
-    (let ((timestamp (if (string-null? date)
+        (status (assoc-ref post-data "status"))
+        (date-str (assoc-ref post-data "date")))
+    (let ((timestamp (if (string-null? date-str)
                          (time-second (current-time))
-                         (rfc822-date->timestamp date))))
-      (let ((metadata (with-output-to-blob
-                       (for-each
-                        (lambda (pair)
-                          (format #t "~a: ~a\n" (car pair) (cdr pair)))
-                        `((timestamp . ,timestamp)
-                          (tags . ,tags)
-                          (status . ,status)
-                          (title . ,title)
-                          (name . ,(title->name title))))))
-            (content (with-output-to-blob (display body)))
-            (key (make-post-key (timestamp->date timestamp)
-                                (title->name title)))
-            (message (format #f "new post: \"~a\"" title)))
-        (post-from-key
-         (git-update-ref
-          "refs/heads/master"
-          (lambda (master)
-            (git-commit-tree (munge-tree master
-                                         `(((,key)
-                                            . ("metadata" ,metadata blob))
-                                           ((,key)
-                                            . ("content" ,content blob)))
-                                         '()
-                                         '())
-                             master message #f))
-          5)
-         key
-         #t)))))
+                         (rfc822-date->timestamp date)))
+          (name (title->name title)))
+      `((title . ,title)
+        (body . ,body)
+        (tags . ,tags)
+        (status . ,status)
+        (timestamp . ,timestamp)
+        (name . ,name)
+        (key . ,(url:encode
+                 (string-append (date->string (timestamp->date timestamp)
+                                              "~Y/~m/~d/")
+                                (url:encode name))))))))
+
+(define (make-new-post post-data)
+  (munge-post #f (parse-post-data post-data)))
+
+(define (modify-post old-key post-data)
+  (munge-post old-key (parse-post-data post-data)))
 
 (define (all-posts master)
   (map (lambda (pair)

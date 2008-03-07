@@ -170,9 +170,16 @@
       (char-numeric? ch)
       (memv ch special-chars)))
 
+(define-public (url:path-part path)
+  (substring path 0 (or (string-index path #\?) (string-length path))))
+
+(define-public (url:query-part path)
+  (let ((q (string-index path #\?)))
+    (if q (substring path (1+ q)) #f)))
+
 (define-public (url:path-split path)
   (filter (lambda (x) (not (string-null? x)))
-          (map url:decode (string-split path #\/))))
+          (map url:decode (string-split (url:path-part path) #\/))))
 
 (define-public (url:path-join path)
   (string-join (map url:encode path) "/"))
