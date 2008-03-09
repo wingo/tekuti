@@ -132,7 +132,7 @@
                    (for-each
                     (lambda (k)
                       (format #t "~a: ~a\n" k (assq-ref parsed k)))
-                    '(timestamp tags status title name))))
+                    '(timestamp tags status title name comment_status))))
         (content (with-output-to-blob (display (assq-ref parsed 'body))))
         (key (assq-ref parsed 'key))
         (message (format #f "~a: \"~a\"" 
@@ -173,15 +173,17 @@
         (body (assoc-ref post-data "body"))
         (tags (assoc-ref post-data "tags"))
         (status (assoc-ref post-data "status"))
+        (comments-open? (assoc-ref post-data "comments"))
         (date-str (assoc-ref post-data "date")))
     (let ((timestamp (if (string-null? date-str)
                          (time-second (current-time))
-                         (rfc822-date->timestamp date)))
+                         (rfc822-date->timestamp date-str)))
           (name (title->name title)))
       `((title . ,title)
         (body . ,body)
         (tags . ,tags)
         (status . ,status)
+        (comment_status . ,(if comments-open? "open" "closed"))
         (timestamp . ,timestamp)
         (name . ,name)
         (key . ,(url:encode
