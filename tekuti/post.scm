@@ -105,11 +105,16 @@
   (git "show" (string-append (assq-ref post 'sha1) ":content")))
 
 (define (post-sxml-content post)
-  (let ((format (or (assq-ref post 'format) 'wordpress)))
-    ((case format
-       ((wordpress) wordpress->sxml)
-       (else (lambda (text) `(pre ,text))))
-     (post-raw-content post))))
+  (let ((format (or (assq-ref post 'format) 'wordpress))
+        (raw (post-raw-content post)))
+    (catch #t
+           (lambda ()
+             (with-backtrace
+              (case format
+                ((wordpress) (wordpress->sxml raw))
+                (else `(pre ,raw)))))
+           (lambda args
+             `(pre "Formatting error\n" ,raw)))))
 
 (define (post-readable-date post)
   (let ((date (time-utc->date
