@@ -39,13 +39,13 @@
             list-intersperse with-backtrace with-time-debugging define-memoized))
 
 (define (emailish? x)
-  (match-bind "^([a-zA-Z0-9.+-]+)@([a-zA-Z0-9-]+\\.)+[a-zA-Z]+$"
+  (match-bind "^([a-zA-Z0-9._+-]+)@([a-zA-Z0-9-]+\\.)+[a-zA-Z]+$"
               x (_ . args)
               x
               #f))
 
 (define (urlish? x)
-  (match-bind "^https?://([a-zA-Z0-9-]+\\.)+[a-zA-Z]+/[a-zA-Z0-9$_.+!*'(),;/?:@&=-]*$"
+  (match-bind "^https?://([a-zA-Z0-9-]+\\.)+[a-zA-Z]+(/[a-zA-Z0-9$_.+!*'(),;/?:@&=-]*)?$"
               x (_ . args)
               x
               #f))

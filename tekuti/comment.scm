@@ -92,11 +92,18 @@
       #f
       `(p "Bad URL. (Only http and https are allowed.)")))
 
+(define (bad-number? x)
+  (if (string->number x)
+      #f
+      '(p "Bad number. Give me something that Scheme's "
+          (tt "string->number") " will like.")))
+
 (define *new-comment-spec*
   `(("author" ,(lambda (x) #f))
     ("email" ,bad-email?)
     ("url" ,bad-url?)
     ("comment" ,bad-user-submitted-xhtml?)
+    ("x" ,bad-number?)
     ("submit" ,(lambda (x) #f))))
 
 (define (bad-new-comment-post? post-data)
