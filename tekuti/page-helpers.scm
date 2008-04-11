@@ -29,6 +29,7 @@
   #:use-module (tekuti util)
   #:use-module (tekuti git)
   #:use-module (tekuti post)
+  #:use-module (tekuti tags)
   #:use-module (tekuti comment)
   #:use-module (tekuti url)
   #:use-module (tekuti request)
@@ -37,7 +38,7 @@
   #:export (relurl rellink redirect post-url
             published-posts
             post-editing-form
-            sidebar-ul main-sidebar tag-cloud
+            sidebar-ul main-sidebar tag-cloud post-sidebar
             post-link admin-post-link admin-post-redirect
             show-post with-authentication
             atom-header atom-entry))
@@ -221,6 +222,19 @@
      (li (h2 "tags " ,(rellink "tags/" ">>"))
          (ul (li (@ (style "line-height: 150%"))
                  ,@(tag-cloud (top-tags index 30))))))))
+
+(define (post-sidebar post index)
+  (sidebar-ul
+   `((li (h2 (a (@ (href ,(relurl "feed/atom")))
+                "subscribe "
+                (img (@ (src ,(relurl "wp-content/feed-icon-14x14.png"))
+                        (alt "[feed]")))
+                )))
+     (li (h2 "related")
+         (ul ,@(map (lambda (post-and-tags)
+                      `(li (@ (style "margin-top: 5px"))
+                           ,(post-link (car post-and-tags))))
+                    (take-max (compute-related-posts post index) 10)))))))
 
 (define (with-authentication request thunk)
   (if (request-authenticated? request)

@@ -52,7 +52,6 @@
             page-show-tag
             page-debug 
             page-search 
-            page-show-post 
             page-feed-atom
             page-debug
             page-not-found))
@@ -185,7 +184,8 @@
     => (lambda (post)
          (rcons* request
                  'title (string-append (post-title post) " -- " *title*)
-                 'body (show-post post #t))))
+                 'body `(,(post-sidebar post index)
+                         ,(show-post post #t)))))
    (else
     (page-not-found request index))))
 

@@ -31,7 +31,7 @@
   #:use-module (tekuti post)
   #:use-module (tekuti git)
   #:use-module ((srfi srfi-1) #:select (filter))
-  #:export (tag-link reindex-tags))
+  #:export (tag-link compute-related-posts reindex-tags))
 
 (define (tag-link tagname)
   `(a (@ (href ,(string-append *public-url-base* "tags/"
@@ -48,6 +48,29 @@
         (post-tags post)))
      posts)
     hash))
+
+(define (compute-related-posts post index)
+  (let ((hash (assq-ref index 'tags))
+        (master (assq-ref index 'master)))
+    (if hash
+        (let ((accum (make-hash-table)))
+          (for-each
+           (lambda (tag)
+             (for-each
+              (lambda (key)
+                (if (not (equal? key (post-key post)))
+                    (hash-push! accum key tag)))
+              (or (hash-ref hash tag) '())))
+           (post-tags post))
+          (dsu-sort (dsu-sort
+                     (hash-fold
+                      (lambda (key tags rest)
+                        (acons (post-from-key master key) tags rest))
+                      '() accum)
+                     (lambda (x) (post-timestamp (car x)))
+                     >)
+                    length >))
+        '())))
 
 (define (reindex-tags old-index index)
   (compute-tags (filter post-published? (assq-ref index 'posts))))
