@@ -149,8 +149,17 @@
            `(div (p "Invalid XHTML")
                  ,(case key
                     ((parser-error)
-                     `(pre ,(with-output-to-string
-                              (lambda () (write args)))))
+                     `(div
+                       (p "The comment filter requires valid XHTML, although "
+                          "it will translate single newlines to <br/> elements, "
+                          "and multiple newlines to paragraphs.")
+                       (p "Usually if you get here it's because you put in a "
+                          "malformed XHTML tag. Another way to get here is if "
+                          "you have an unescaped <, >, or & character. Replace "
+                          "them with &lt;, &gt;, or &amp;, respectively.")
+                       (p "Here is the internal error:")
+                       (pre ,(with-output-to-string
+                               (lambda () (write args))))))
                     ((bad-tag)
                      `(p "XHTML tag disallowed: " ,(symbol->string (car args))))
                     ((bad-attr)
