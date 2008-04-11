@@ -251,7 +251,11 @@
               (else (lp (cdr posts))))))))
 
 (define (page-show-tags request index)
-  (not-implemented request index))
+  (rcons* request
+          'title (string-append "all tags -- " *title*)
+          'body `((div (@ (id "tag-cloud"))
+                       (h2 "all tags")
+                       ,@(tag-cloud (top-tags index 200))))))
 
 (define (page-show-tag request index tag)
   (let* ((tags (assq-ref index 'tags))

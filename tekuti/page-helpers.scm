@@ -38,7 +38,7 @@
   #:export (relurl rellink redirect post-url
             published-posts
             post-editing-form
-            sidebar-ul main-sidebar tag-cloud post-sidebar
+            sidebar-ul main-sidebar top-tags tag-cloud post-sidebar
             post-link admin-post-link admin-post-redirect
             show-post with-authentication
             atom-header atom-entry))
