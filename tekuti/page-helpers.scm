@@ -183,41 +183,44 @@
 (define (admin-post-redirect request post)
   (redirect request (admin-post-url post)))
 
-;; fixme: borks in the no-tags case; ugly code
-(define (tag-cloud index)
+(define (top-tags index n)
+  (let ((hash (assq-ref index 'tags)))
+    (if hash
+        (dsu-sort
+         (take-max
+          (dsu-sort         
+           (hash-fold (lambda (k v seed) (acons k (length v) seed))
+                      '() hash)
+           cdr >) n)
+         car string<?)
+        '())))
+
+(define (tag-cloud tags)
   (define (determine-sizes counts)
-    (let ((maxcount (apply max counts)))
+    (let ((maxcount (if (null? counts) '() (apply max counts))))
       (map (lambda (x)
              (floor (+ 80 (* 120 (/ x maxcount)))))
            counts)))
-  (let* ((hash (assq-ref index 'tags))
-         (cats (if hash
-                   (hash-fold (lambda (k v seed) (acons k (length v) seed))
-                              '() hash)
-                   '()))
-         (top-20 (dsu-sort (take-max (dsu-sort cats cdr >) 20)
-                           car string<?)))
-    `(ul (li (@ (style "line-height: 150%"))
-             ,@(list-intersperse
-                (map (lambda (name size)
-                       `(a (@ (href ,(relurl "tags/" (url:encode name)))
-                              (rel "tag")
-                              (style ,(format #f "font-size: ~d%" size)))
-                           ,name))
-                     (map car top-20)
-                     (determine-sizes (map cdr top-20)))
-                " "))
-         )))
+  (list-intersperse
+   (map (lambda (name size)
+          `(a (@ (href ,(relurl "tags/" (url:encode name)))
+                 (rel "tag")
+                 (style ,(format #f "font-size: ~d%" size)))
+              ,name))
+        (map car tags)
+        (determine-sizes (map cdr tags)))
+   " "))
 
 (define (main-sidebar request index)
   (sidebar-ul
    `((li (h2 (a (@ (href ,(relurl "feed/atom")))
                 "subscribe "
                 (img (@ (src ,(relurl "wp-content/feed-icon-14x14.png"))
-                        (alt "subscribe to this feed")))
+                        (alt "[feed]")))
                 )))
      (li (h2 "tags " ,(rellink "tags/" ">>"))
-         ,(tag-cloud index)))))
+         (ul (li (@ (style "line-height: 150%"))
+                 ,@(tag-cloud (top-tags index 30))))))))
 
 (define (with-authentication request thunk)
   (if (request-authenticated? request)
