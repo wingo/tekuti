@@ -42,6 +42,7 @@
             main-sidebar post-sidebar related-tag-cloud
             post-link admin-post-link admin-post-redirect
             show-post with-authentication
+            find-posts-matching
             atom-header atom-entry))
 
 (define (relurl . paths)
@@ -220,6 +221,11 @@
                 (img (@ (src ,(relurl "wp-content/feed-icon-14x14.png"))
                         (alt "[feed]")))
                 )))
+     (li (h2 "search")
+         (form (@ (method "POST")
+                  (action ,(relurl "search")))
+               (input (@ (name "string") (type "text") (size "15")
+                         (value "")))))
      (li (h2 "tags " ,(rellink "tags/" ">>"))
          (ul (li (@ (style "line-height: 150%"))
                  ,@(tag-cloud (top-tags index 30))))))))
@@ -241,6 +247,17 @@
   `(div (@ (id "tag-cloud"))
         (h2 "related tags")
         ,@(tag-cloud (compute-related-tags tag index))))
+
+(define (find-posts-matching string index)
+  (let ((master (assq-ref index 'master)))
+    (dsu-sort
+     (filter
+      identity
+      (match-lines (git "grep" "-l" "-F" string master "--" "*/content")
+                   ":(.+)/content$" (_ key)
+                   (post-from-key master key)))
+     post-timestamp
+     >)))
 
 (define (with-authentication request thunk)
   (if (request-authenticated? request)

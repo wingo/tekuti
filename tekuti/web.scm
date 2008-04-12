@@ -103,6 +103,7 @@
    ((POST archives year! month! day! post!) page-new-comment)
    ((GET feed) page-feed-atom)
    ((GET feed atom) page-feed-atom)
+   ((POST search) page-search)
    ((GET tags) page-show-tags)
    ((GET tags tag!) page-show-tag)
    ((GET debug) page-debug)

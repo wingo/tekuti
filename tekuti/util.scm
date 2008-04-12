@@ -92,9 +92,9 @@
   (let ((line (gensym)) (seed (gensym)))
     `(,fold
       (lambda (,line ,seed)
-        (match-bind ,pattern ,line ,bindings
-                    (cons ,expr ,seed)
-                    ,seed))
+        (,match-bind ,pattern ,line ,bindings
+                     (cons ,expr ,seed)
+                     ,seed))
       '() (string-split ,string #\newline))))
 
 ;; clause := ((pat args) body...)

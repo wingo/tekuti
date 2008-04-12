@@ -250,6 +250,17 @@
                    (lp (cdr posts) new-header (cons `(p ,(post-link (car posts))) out))))))
               (else (lp (cdr posts))))))))
 
+(define (page-search request index)
+  (let* ((string (or (assoc-ref (request-form-data request) "string") ""))
+         (posts (find-posts-matching string index)))
+    (rcons* request
+            'body `((h2 "search results: \"" ,string "\"")
+                    ,@(if (null? posts)
+                          `((p "No posts matched your search string."))
+                          (map (lambda (post)
+                                 `(p ,(post-link post)))
+                               posts))))))
+
 (define (page-show-tags request index)
   (rcons* request
           'title (string-append "all tags -- " *title*)
