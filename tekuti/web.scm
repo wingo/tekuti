@@ -107,7 +107,6 @@
    ((GET tags) page-show-tags)
    ((GET tags tag!) page-show-tag)
    ((GET debug) page-debug)
-   ((POST search) page-search)
    (else page-not-found)))
 
 (define (handle-request request index)

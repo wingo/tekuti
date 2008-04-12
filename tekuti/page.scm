@@ -295,8 +295,6 @@
                             `(tr (td ,(car pair)) (td ,(cdr pair))))
                           (rref request 'headers))))))
 
-(define page-search not-implemented)
-
 (define (page-not-found request index)
   (rcons* (pk 'not-found request)
           'status 404
