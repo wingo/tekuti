@@ -253,7 +253,10 @@
     (dsu-sort
      (filter
       identity
-      (match-lines (git "grep" "-l" "-F" string master "--" "*/content")
+      (match-lines (or (false-if-git-error
+                        ;; dunno why git errors sometimes here...
+                        (git "grep" "-l" "-F" string master "--" "*/content"))
+                       "")
                    ":(.+)/content$" (_ key)
                    (post-from-key master key)))
      post-timestamp
