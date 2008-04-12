@@ -38,7 +38,8 @@
   #:export (relurl rellink redirect post-url
             published-posts
             post-editing-form
-            sidebar-ul main-sidebar top-tags tag-cloud post-sidebar
+            sidebar-ul top-tags tag-cloud
+            main-sidebar post-sidebar related-tag-cloud
             post-link admin-post-link admin-post-redirect
             show-post with-authentication
             atom-header atom-entry))
@@ -235,6 +236,11 @@
                       `(li (@ (style "margin-top: 5px"))
                            ,(post-link (car post-and-tags))))
                     (take-max (compute-related-posts post index) 10)))))))
+
+(define (related-tag-cloud tag index)
+  `(div (@ (id "tag-cloud"))
+        (h2 "related tags")
+        ,@(tag-cloud (compute-related-tags tag index))))
 
 (define (with-authentication request thunk)
   (if (request-authenticated? request)

@@ -267,7 +267,8 @@
                 'title (string-append "posts tagged \"" tag "\"")
                 'body `((h2 "posts tagged \"" ,tag "\"")
                         ,@(map (lambda (post) `(p ,(post-link post)))
-                               posts)))
+                               posts)
+                        ,(related-tag-cloud tag index)))
         (rcons* request
                 'status 404
                 'body `((h2 "Unknown tag " ,tag)
