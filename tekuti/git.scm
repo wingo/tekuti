@@ -120,7 +120,10 @@
         (begin
           (mkdir d)
           (chdir d)
-          (git "init"))
+          (git "init")
+          (git "update-ref" "refs/heads/master"
+               (git-commit-tree (string-trim-both (git* '("mktree") #:input ""))
+                                #f "initial commit" #f)))
         (chdir d))))
 
 (define (git-ls-tree treeish path)
