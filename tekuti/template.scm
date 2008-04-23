@@ -39,11 +39,13 @@
           (cond ((null? in) (reverse out))
                 (else (lp (cdr in) (cons* (car in) infix out)))))))
   (define (make-navbar)
-    `(div (@ (id "navbar"))
-          ,@(list-join
-             (map (lambda (x) `(a (@ ,(href x "/")) ,x))
-                  '("about" "software" "writings" "photos"))
-             " | ")))
+    (if (null? *navbar-links*)
+        '()
+        `((div (@ (id "navbar"))
+               ,@(list-join
+                  (map (lambda (x) `(a (@ (href ,(cdr x))) ,(car x)))
+                       *navbar-links*)
+                  *navbar-infix*)))))
   `(html
     (head (title ,(rref request 'title *title*))
           (meta (@ (name "Generator")
@@ -51,15 +53,15 @@
           (link (@ (rel "stylesheet")
                    (type "text/css")
                    (media "screen")
-                   (href "/base.css")))) ;fixme
+                   (href ,*css-file*))))
     (body
      (div (@ (id "rap"))
           (h1 (@ (id "header"))
               (a (@ ,(href "")) ,*title*))
-          ,(make-navbar)
+          ,@(make-navbar)
           (div (@ (id "content"))
                ,@(rref request 'body '((p "(missing content?)"))))
           (div (@ (id "footer"))
                "powered by "
                (a (@ (href "http://wingolog.org/software/tekuti/"))
-                  "parentheses"))))))
+                  "tekuti"))))))

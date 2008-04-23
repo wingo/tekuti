@@ -28,6 +28,7 @@
   #:use-module (tekuti util)
   #:export (*host* *port* *backlog* *git-dir* *git* *public-url-base*
             *private-url-base* *debug* *admin-user* *admin-pass*
+            *css-file* *navbar-links* *navbar-infix*
             *title* *subtitle* *name*))
 
 (define *host* "127.0.0.1")
@@ -37,9 +38,12 @@
 (define *git* "git")
 (define *public-url-base* "/blog/")
 (define *private-url-base* "/blog/")
+(define *css-file* "/base.css")
+(define *navbar-links* '())
+(define *navbar-infix* " ")
 (define *debug* #t)
 (define *admin-user* "admin")
-(define *admin-pass* "totingiini")
+(define *admin-pass* "admin")
 (define *title* "My blog")
 (define *subtitle* "Just a blog, ok")
 (define *name* "Joe Schmo")

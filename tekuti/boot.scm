@@ -38,6 +38,7 @@
 (define *option-grammar* '((gds)
                            (usage)
                            (repl)
+                           (config (value #t) (single-char #\c))
                            (version (single-char #\v))
                            (help (single-char #\h))))
 
@@ -76,6 +77,13 @@
 
 (define (boot args)
   (let ((options (parse-options args)))
+    (let ((config (option-ref options 'config #f)))
+      (if config
+          (let ((config-module (resolve-module '(tekuti config))))
+            (save-module-excursion
+             (lambda ()
+               (set-current-module config-module)
+               (primitive-load config))))))
     (ensure-git-repo)
     (if (option-ref options 'repl #f)
         (begin (make-thread event-loop)
