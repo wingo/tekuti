@@ -56,9 +56,11 @@
   (output git-condition-output)
   (status git-condition-status))
 
-(define-macro (false-if-git-error . body)
-  `(,guard (c ((,git-condition? c) #f))
-           ,@body))
+(define-syntax false-if-git-error
+  (syntax-rules ()
+    ((_ body0 body ...)
+     (guard (c ((git-condition? c) #f))
+        body0 body ...))))
 
 ;;;
 ;;; running git

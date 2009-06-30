@@ -36,7 +36,7 @@
             date-increment date-comparator date-before? date-after? compose1
             rfc822-date->timestamp timestamp->rfc822-date timestamp->atom-date
             timestamp->date string-split/trimming
-            list-intersperse with-backtrace with-time-debugging define-memoized))
+            list-intersperse with-backtrace with-time-debugging))
 
 (define (emailish? x)
   (match-bind "^([a-zA-Z0-9._+-]+)@([a-zA-Z0-9-]+\\.)+[a-zA-Z]+$"
@@ -88,36 +88,26 @@
           (string-join (cons (passwd:dir (getpwnam user)) (cdr parts)) "/"))
         path)))
 
-(define-macro (match-lines string pattern bindings expr)
-  (let ((line (gensym)) (seed (gensym)))
-    `(,fold
-      (lambda (,line ,seed)
-        (,match-bind ,pattern ,line ,bindings
-                     (cons ,expr ,seed)
-                     ,seed))
-      '() (string-split ,string #\newline))))
-
-;; clause := ((pat args) body...)
-(define-macro (match-case string . clauses)
-  (let ((str (gensym)))
-    `(let ((,str ,string))
-       ,(let lp ((in clauses))
-          (let ((clause (car in)))
-            (if (eq? (car clause) 'else)
-                `(begin ,@(cdr clause))
-                `(match-bind ,(caar clause) ,str ,(cadar clause)
-                             (begin ,@(cdr clause))
-                             ,(if (null? (cdr in))
-                                  #f
-                                  (lp (cdr in))))))))))
+(define-syntax match-lines
+  (syntax-rules ()
+    ((_ string pattern bindings expr)
+     (let ((rx (irregex pattern)))
+       (fold
+        (lambda (line seed)
+          (match-bind rx line bindings
+                      (cons expr seed)
+                      seed))
+        '() (string-split string #\newline))))))
 
 (define (dbg fmt . args)
   (apply format (current-error-port) fmt args))
 
-(define-macro (unwind-protect form . cleanups)
-  `(dynamic-wind (lambda () #t)
-       (lambda () ,form)
-       (lambda () ,@cleanups)))
+(define-syntax unwind-protect
+  (syntax-rules ()
+    ((_ form cleanup0 cleanups ...)
+     (dynamic-wind (lambda () #t)
+                   (lambda () form)
+                   (lambda () cleanup0 cleanups ...)))))
 
 (define (dsu-sort list key less)
   (map cdr
@@ -196,8 +186,10 @@
                         (fluid-set! the-last-stack (make-stack #t 2 0))
                         (apply throw args)))))
 
-(define-macro (with-backtrace . forms)
-  `(,with-backtrace* (lambda () ,@forms)))
+(define-syntax with-backtrace
+  (syntax-rules ()
+    ((_ form0 forms ...)
+     (with-backtrace* (lambda () form0 forms ...)))))
 
 (define (gettimeofday-diff prev)
   (let ((now (gettimeofday)))
@@ -211,8 +203,10 @@
      (proc)
      (pk 'stop-clock (gettimeofday-diff start)))))
 
-(define-macro (with-time-debugging . forms)
-  `(,with-time-debugging* (lambda () ,@forms)))
+(define-syntax with-time-debugging
+  (syntax-rules ()
+    ((_ form0 forms ...)
+     (with-time-debugging* (lambda () form0 forms ...)))))
 
 (define (memoize1 proc)
   (let ((old-args #f) (cache #f) (proc proc))
@@ -223,11 +217,6 @@
             (set! old-args args)
             (set! cache val)
             val)))))
-
-(define-macro (define-memoized form . body)
-  `(begin
-     (define ,form ,@body)
-     (set! ,(car form) (,memoize1 ,(car form)))))
 
 (define (write-hash h)
   (write (hash-fold acons '() h)))

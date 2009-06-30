@@ -32,7 +32,7 @@
   #:use-module (tekuti template)
   #:use-module (tekuti page)
   #:use-module (srfi srfi-1)
-  #:export (let-headers header-ref
+  #:export (header-ref
             handle-request))
             
 (define *status-names*
@@ -52,17 +52,6 @@
   (string-append
    "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\" "
    "\"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\">\n"))
-
-;;; useless macro
-(define-macro (let-headers headers bindings . body)
-  (let ((headers-var (gensym)))
-    `(let ((,headers-var ,headers))
-       (let (,@(map (lambda (binding)
-                      `(,(car binding)
-                        (or (assoc-ref ,headers-var ,(cadr binding))
-                            (error "Missing header:" ,(cadr binding)))))
-                    bindings))
-         ,@body))))
 
 (define (make-output request)
   (lambda (port)

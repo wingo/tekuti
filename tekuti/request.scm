@@ -128,68 +128,80 @@
                                    #f)
                        #f)))))
 
-(define-macro (let-request request bindings . body)
-  (let ((request-var (gensym)))
+(define-syntax let-request
+  (lambda (stx)
     (define (make-binding b)
-      (cond
-       ((symbol? b) `(,b (,rref ,request-var ',b)))
-       ((list? b) `(,(car b) (,rref ,request-var ',(car b) ,@(cdr b))))
-       (else (error "what" b))))
-    `(let ((,request-var ,request))
-       (let (,@(map make-binding bindings))
-         ,@body))))
+      (syntax-case b ()
+        ((id option ...)
+         (identifier? #'id)
+         #'(id (rref request-var 'id option ...)))
+        (id
+         (identifier? #'id)
+         #'(id (rref request-var 'id)))))
+    (syntax-case stx ()
+      ((_ request (binding ...) body ...)
+       (with-syntax (((binding ...) (map make-binding #'(binding ...))))
+         #`(let ((request-var request))
+             (let (binding ...)
+               body ...)))))))
 
-(define-macro (path-proc-case path . clauses)
-  (let ((path-var (gensym)))
+(define-syntax path-proc-case
+  (lambda (stx)
     (define (optional-argument? arg)
-      (eqv? (string-ref arg (1- (string-length arg))) #\?))
+      (eqv? (string-ref arg (- (string-length arg) 1)) #\?))
     (define (required-argument? arg)
-      (eqv? (string-ref arg (1- (string-length arg))) #\!))
+      (eqv? (string-ref arg (- (string-length arg) 1)) #\!))
     (define (output-argument? arg)
       (or (optional-argument? arg) (required-argument? arg)))
     (define (process-clause clause)
-      (or (list-has-length? clause 2) (error "foo"))
-      (if (eq? (car clause) 'else)
-          clause
-          (let ((pat (map symbol->string (car clause)))
-                (proc (cadr clause)))
-            (cond
-             ((find-tail output-argument? pat)
-              => (lambda (tail)
-                   (define test
-                     (let* ((npat (length pat))
-                            (ntail (length tail))
-                            (req (find-tail required-argument? tail))
-                            (opt (find-tail optional-argument? tail))
-                            (nopt (if opt (length opt) 0))
-                            (nreq (if req (- (length req) nopt) 0)))
-                       (lambda (path)
-                         (let ((pathtail (list-head-match pat path (- npat ntail))))
-                           ;(pk pat npat ntail req opt nopt nreq path pathtail)
-                           (if (and pathtail (>= (length pathtail) nreq)
-                                    (<= (length pathtail) (+ nreq nopt)))
-                               (append pathtail
-                                       (make-list (- (+ nreq nopt) (length pathtail)) #f))
-                               #f)))))
-                   `((,test ,path-var)
-                     => (lambda (outargs)
-                          (lambda args
-                            (apply ,proc (append args outargs)))))))
-             (else
-              `((equal? ,path-var ',pat) ,proc))))))
-    `(let ((,path-var ,path))
-       (cond ,@(map process-clause clauses)))))
+      (syntax-case clause (else)
+        ((else expr ...) clause)
+        (((p ...) proc)
+         (let ((pat (map (lambda (p)
+                           (symbol->string (syntax->datum p)))
+                         #'(p ...))))
+           (cond
+            ((find-tail output-argument? pat)
+             => (lambda (tail)
+                  (let* ((req (find-tail required-argument? tail))
+                         (opt (find-tail optional-argument? tail))
+                         (npat (length pat))
+                         (ntail (length tail))
+                         (nopt (if opt (length opt) 0))
+                         (nreq (if req (- (length req) nopt) 0)))
+                    #`((let ((pathtail (list-head-match '#,pat
+                                                        path-var
+                                                        (- #,npat #,ntail))))
+                         ;;(pk pat npat ntail req opt nopt nreq path pathtail)
+                         (if (and pathtail (>= (length pathtail) #,nreq)
+                                  (<= (length pathtail) (+ #,nreq #,nopt)))
+                             (append
+                              pathtail
+                              (make-list (- (+ #,nreq #,nopt) (length pathtail)) #f))
+                             #f))
+                       => (lambda (outargs)
+                            (lambda args
+                              (apply proc (append args outargs))))))))
+            (else
+             #`((equal? path-var '#,pat) proc)))))))
+    (syntax-case stx ()
+      ((_ path clause ...)
+       (with-syntax (((cond-clause ...) (map process-clause #'(clause ...))))
+         #`(let ((path-var path))
+             (cond cond-clause ...)))))))
 
 (define (rcons*-fold request . keys-and-procs)
   (foldn (lambda (request k proc)
            (rcons k (proc request) request))
          2 request keys-and-procs))
 
-(define-macro (request-path-case request . clauses)
-  `(,path-proc-case
-    (,let-request ,request (method path)
-                  (cons method path))
-    ,@clauses))
+(define-syntax request-path-case
+  (syntax-rules ()
+    ((_ request clause ...)
+     (path-proc-case
+       (let-request request (method path)
+                    (cons method path))
+       clause ...))))
 
 (define (request-server-name request)
   (let ((headers (rref request 'headers)))
