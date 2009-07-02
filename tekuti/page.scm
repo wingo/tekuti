@@ -308,7 +308,7 @@
         (server-name (request-server-name request)))
     (cond
      ((let ((since (assoc-ref (rref request 'headers '())
-                              "If-Modified-Since")))
+                              "if-modified-since")))
         (and since (>= (rfc822-date->timestamp since) last-modified)))
       (rcons* request
               'status 304

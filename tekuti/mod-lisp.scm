@@ -45,7 +45,8 @@
     (let ((k (read-line*)))
       (if (string=? k "end")
           (reverse (map cons keys values))
-          (lp (cons k keys) (cons (read-line*) values))))))
+          (lp (cons (string-downcase k) keys)
+              (cons (read-line*) values))))))
 
 (define (read-chars nchars port)
   (let ((buf (make-string nchars)))

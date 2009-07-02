@@ -118,7 +118,7 @@
 ;; danger here, regarding the optional alternate clauses...
 (define (request-authenticated? request)
   (let ((headers (rref request 'headers '())))
-    (let ((auth (assoc-ref headers "Authorization")))
+    (let ((auth (assoc-ref headers "authorization")))
       (and auth
            (match-bind "^Basic ([A-Za-z0-9+/=]*)$" auth (_ b64)
                        (match-bind "^([^:]*):(.*)$"
@@ -193,7 +193,7 @@
 
 (define (request-server-name request)
   (let ((headers (rref request 'headers)))
-    (or (assoc-ref headers "Host")
+    (or (assoc-ref headers "host")
         (assoc-ref headers "server-ip-addr"))))
 
 
