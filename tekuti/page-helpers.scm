@@ -278,7 +278,9 @@
      (@ (xmlns "http://www.w3.org/2005/Atom") (xml:base ,(relurl "")))
      (title (@ (type "text")) ,*title*)
      (subtitle (@ (type "text")) ,*subtitle*)
-     (updated ,(timestamp->atom-date last-modified))
+     ,@(if last-modified
+           `((updated ,(timestamp->atom-date last-modified)))
+           '())
      (generator (@ (uri "http://wingolog.org/software/tekuti")
                    (version "what"))
                 "tekuti")

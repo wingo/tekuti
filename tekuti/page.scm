@@ -314,10 +314,12 @@
               'status 304
               'doctype #f))
      (else
-      (rcons* (rpush 'output-headers (cons "Last-Modified"
-                                           (timestamp->rfc822-date
-                                            last-modified))
-                     request)
+      (rcons* (if last-modified
+                  (rpush 'output-headers (cons "Last-Modified"
+                                               (timestamp->rfc822-date
+                                                last-modified))
+                         request)
+                  request)
               'doctype ""
               'content-type "application/atom+xml"
               'sxml (append (atom-header server-name last-modified)
