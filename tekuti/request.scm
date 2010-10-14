@@ -32,6 +32,7 @@
   #:use-module (tekuti url)
   #:use-module (tekuti config)
   #:use-module (tekuti base64)
+  #:use-module (rnrs bytevectors)
   #:export (make-request rcons rcons* rpush rpush* rref let-request
             request-path-case request-authenticated?
             request-form-data request-server-name))
@@ -122,7 +123,8 @@
       (and auth
            (match-bind "^Basic ([A-Za-z0-9+/=]*)$" auth (_ b64)
                        (match-bind "^([^:]*):(.*)$"
-                                   (base64-decode b64) (_ user pass)
+                                   (utf8->string (base64-decode b64))
+                                   (_ user pass)
                                    (and (equal? user *admin-user*)
                                         (equal? pass *admin-pass*))
                                    #f)

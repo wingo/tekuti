@@ -1,5 +1,6 @@
 ;; Tekuti
-;; Copyright (C) 2008 Andy Wingo <wingo at pobox dot com>
+;; Copyright (C) 2008, 2010 Andy Wingo <wingo at pobox dot com>
+;; Copyright (C) 2009 Andreas Rottmann <a dot rottmann at gmx dot at>
 
 ;; This program is free software; you can redistribute it and/or    
 ;; modify it under the terms of the GNU General Public License as   
@@ -25,86 +26,113 @@
 ;;; Code:
 
 (define-module (tekuti base64)
+  #:use-module (rnrs bytevectors)
   #:export (base64-encode base64-decode))
 
-(define b64-chars
-  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwzyz0123456789+/")
+(define b64-bytes
+  (string->utf8
+   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwzyz0123456789+/"))
 
-(define (int->b64-char i)
-  (string-ref b64-chars (logand i 63)))
+(define (int->b64-byte i)
+  (bytevector-u8-ref b64-bytes (logand i 63)))
  
-(define b64-char-ranges
+(define b64-byte-ranges
   (map cons
        (map char->integer '(#\A #\a #\0 #\+ #\/))
        (map char->integer '(#\Z #\z #\9 #\+ #\/))))
 
-(define (b64-char->int c)
-  (let ((i (char->integer c)))
-    (let lp ((ranges b64-char-ranges) (out 0))
-      (cond ((null? ranges)
-             (error "bad base64 char" c))
-            ((and (>= i (caar ranges)) (<= i (cdar ranges)))
-             (+ out (- i (caar ranges))))
-            (else
-             (lp (cdr ranges) (+ out (1+ (- (cdar ranges)
-                                            (caar ranges))))))))))
+(define (b64-byte->int i)
+  (let lp ((ranges b64-byte-ranges) (out 0))
+    (cond ((null? ranges)
+           (error "bad base64 byte" i))
+          ((and (>= i (caar ranges)) (<= i (cdar ranges)))
+           (+ out (- i (caar ranges))))
+          (else
+           (lp (cdr ranges) (+ out (+ 1 (- (cdar ranges)
+                                           (caar ranges)))))))))
 
-(define make-bytevector make-string)
-(define bytevector-ref string-ref)
-(define bytevector-length string-length)
-(define bytevector-set! string-set!)
-(define bytevector-pad string-pad-right)
-(define byte->integer char->integer)
-(define integer->byte integer->char)
+(define (bytevector-pad bv n fill)
+  (let ((result (make-bytevector n fill)))
+    (bytevector-copy! bv 0 result 0 (bytevector-length bv))
+    result))
 
-(define-macro (bytevector-map-n-to-m n m)
-  `(lambda (proc s)
-     (let* ((len (bytevector-length s))
-            (out (make-bytevector (* len (/ ,m ,n)))))
-       (let lp ((i 0) (j 0))
-         (cond
-          ((< i len)
-           (let inner ((k 0) (bytes (proc ,@(map (lambda (x)
-                                                   `(bytevector-ref s (+ i ,x)))
-                                                 (iota n)))))
-             (if (not (null? bytes))
-                 (begin (bytevector-set! out (+ j k) (car bytes))
-                        (inner (1+ k) (cdr bytes)))))
-           (lp (+ i ,n) (+ j ,m)))
-          (else out))))))
+(define-syntax bytevector-map-n-to-m
+  (lambda (stx)
+    (syntax-case stx ()
+      ((_ n m)
+       (with-syntax (((byte-arg ...)
+                      (map (lambda (x)
+                             #`(bytevector-u8-ref s (+ i #,x)))
+                           (iota (syntax->datum #'n)))))
+         #'(lambda (proc s)
+             (let* ((len (bytevector-length s))
+                    (out (make-bytevector (* len (/ m n)))))
+               (let lp ((i 0) (j 0))
+                 (cond
+                  ((< i len)
+                   (let inner ((k 0) (bytes (proc byte-arg ...)))
+                     (if (not (null? bytes))
+                         (begin (bytevector-u8-set! out (+ j k) (car bytes))
+                                (inner (+ k 1) (cdr bytes)))))
+                   (lp (+ i n) (+ j m)))
+                  (else out))))))))))
 
 (define bytevector-map-3-to-4
   (bytevector-map-n-to-m 3 4))
 (define bytevector-map-4-to-3
   (bytevector-map-n-to-m 4 3))
 
-(define (base64-encode s)
-  (let* ((npad (remainder (- 3 (remainder (bytevector-length s) 3)) 3))
+(define (bytevector-fill-range! bv start end u8)
+  (do ((i (- end 1) (- i 1)))
+      ((< i start))
+      (bytevector-u8-set! bv i u8)))
+
+(define (bytevector-copy/padding bv npad pad-byte)
+  (let ((result (bytevector-copy bv))
+        (len (bytevector-length bv)))
+    (bytevector-fill-range! result (- len npad) len pad-byte)
+    result))
+
+(define (base64-encode bv)
+  (let* ((npad (remainder (- 3 (remainder (bytevector-length bv) 3)) 3))
          (out (bytevector-map-3-to-4
                (lambda (x y z)
-                 (let ((n (logior (ash (byte->integer x) 16)
-                                  (ash (byte->integer y) 8)
-                                  (byte->integer z))))
-                   (map int->b64-char
+                 (let ((n (logior (ash x 16) (ash y 8) z)))
+                   (map int->b64-byte
                         (list (ash n -18) (ash n -12) (ash n -6) n))))
-               (bytevector-pad s (+ (bytevector-length s) npad)
-                               (integer->byte 0)))))
-    (string-append (substring out 0 (- (string-length out) npad))
-                   (make-string npad #\=))))
+               (bytevector-pad bv (+ (bytevector-length bv) npad) 0))))
+    (bytevector-fill-range! out
+                            (- (bytevector-length out) npad)
+                            (bytevector-length out)
+                            (char->integer #\=))
+    (utf8->string out)))
 
-(define (base64-decode s)
-  (let* ((npad (cond ((string-suffix? "==" s) 2)
-                     ((string-suffix? "=" s) 1)
-                     (else 0)))
+(define eql-byte (char->integer #\=))
+
+(define (b64-bv-npad bv)
+  (let ((len (bytevector-length bv)))
+    (if (> len 0)
+        (if (= (bytevector-u8-ref bv (- len 1)) eql-byte)
+            (if (> len 1)
+                (if (= (bytevector-u8-ref bv (- len 2)) eql-byte)
+                    2
+                    1)
+                1)
+            0)
+        0)))
+
+(define (base64-decode str)
+  (let* ((bv (string->utf8 str))
+         (npad (b64-bv-npad bv))
          (out (bytevector-map-4-to-3
                (lambda (w x y z)
-                 (let ((n (logior (ash (b64-char->int w) 18)
-                                  (ash (b64-char->int x) 12)
-                                  (ash (b64-char->int y) 6)
-                                  (b64-char->int z))))
-                   (map integer->byte
-                        (list (ash n -16) (logand (ash n -8) 255)
-                              (logand n 255)))))
-               (string-append (substring s 0 (- (string-length s) npad))
-                              (make-string npad #\A)))))
-    (substring out 0 (- (string-length out) npad))))
+                 (let ((n (logior (ash (b64-byte->int w) 18)
+                                  (ash (b64-byte->int x) 12)
+                                  (ash (b64-byte->int y) 6)
+                                  (b64-byte->int z))))
+                   (list (ash n -16) (logand (ash n -8) 255)
+                         (logand n 255))))
+               (bytevector-copy/padding bv npad (char->integer #\A))))
+         (result (make-bytevector (- (bytevector-length out) npad))))
+    (bytevector-copy! out 0 result 0 (bytevector-length result))
+    result))
