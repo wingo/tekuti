@@ -227,7 +227,7 @@
               (read))
     h))
 
-(define/kwargs (date-increment date (day 0) (month 0) (year 0))
+(define* (date-increment date #:key (day 0) (month 0) (year 0))
   (make-date (date-nanosecond date) (date-second date)
              (date-minute date) (date-minute date)
              (+ (date-day date) day) (+ (date-month date) month)

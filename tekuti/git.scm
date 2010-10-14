@@ -29,7 +29,6 @@
   #:use-module (ice-9 popen)
   #:use-module (tekuti util)
   #:use-module (tekuti config)
-  #:use-module (scheme kwargs)
   #:use-module (tekuti match-bind)
   #:use-module ((srfi srfi-1) #:select (filter-map partition
                                         delete-duplicates))
@@ -95,7 +94,7 @@
                                (output output)
                                (status ret))))))))
 
-(define/kwargs (git* args (input #f) (env '()))
+(define* (git* args #:key (input #f) (env '()))
   (if input
       (call-with-temp-file
        input

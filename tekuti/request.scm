@@ -26,7 +26,6 @@
 
 (define-module (tekuti request)
   #:use-module ((srfi srfi-1) #:select (find-tail fold))
-  #:use-module (scheme kwargs)
   #:use-module (tekuti match-bind)
   #:use-module (tekuti util)
   #:use-module (tekuti url)
@@ -109,7 +108,7 @@
         request
         (lp (rpush (car kv) (cadr kv) request) (cddr kv)))))
 
-(define/kwargs (rref request k (default #f) (default-proc #f))
+(define* (rref request k #:optional (default #f) #:key (default-proc #f))
   (let ((pair (assq k request)))
     (cond
      (pair (cdr pair))
