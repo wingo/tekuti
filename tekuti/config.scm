@@ -1,5 +1,5 @@
 ;; Tekuti
-;; Copyright (C) 2008 Andy Wingo <wingo at pobox dot com>
+;; Copyright (C) 2008, 2010 Andy Wingo <wingo at pobox dot com>
 
 ;; This program is free software; you can redistribute it and/or    
 ;; modify it under the terms of the GNU General Public License as   
@@ -26,6 +26,7 @@
 
 (define-module (tekuti config)
   #:use-module (tekuti util)
+  #:use-module ((sxml ssax) #:select (define-parsed-entity!))
   #:export (*host* *port* *backlog* *git-dir* *git* *public-url-base*
             *private-url-base* *debug* *admin-user* *admin-pass*
             *css-file* *navbar-links* *navbar-infix*
@@ -48,16 +49,9 @@
 (define *subtitle* "Just a blog, ok")
 (define *name* "Joe Schmo")
 
-(define *character-entities* '((agrave . 224)
-                               (laquo . 171)
-                               (mdash . 8212)
-                               (nbsp . 160)
-                               (raquo . 187)
-                               (uacute . 250)))
-(use-modules (sxml ssax-simple) (sxml unicode))
-(for-each
- (lambda (pair)
-   (set! ssax:predefined-parsed-entities
-         (assoc-set! ssax:predefined-parsed-entities
-                     (car pair) (unichar->utf-8 (cdr pair)))))
- *character-entities*)
+(define-parsed-entity! 'agrave 224)
+(define-parsed-entity! 'laquo 171)
+(define-parsed-entity! 'mdash 8212)
+(define-parsed-entity! 'nbsp 160)
+(define-parsed-entity! 'raquo 187)
+(define-parsed-entity! 'uacute 250)
