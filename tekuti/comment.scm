@@ -1,5 +1,5 @@
 ;; Tekuti
-;; Copyright (C) 2008 Andy Wingo <wingo at pobox dot com>
+;; Copyright (C) 2008, 2010 Andy Wingo <wingo at pobox dot com>
 
 ;; This program is free software; you can redistribute it and/or    
 ;; modify it under the terms of the GNU General Public License as   
@@ -32,7 +32,7 @@
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-19)
   #:use-module (sxml transform)
-  #:use-module (match-bind)
+  #:use-module (tekuti match-bind)
   #:export (blob->comment comment-sxml-content comment-timestamp
             comment-readable-date bad-new-comment-post? make-new-comment))
 

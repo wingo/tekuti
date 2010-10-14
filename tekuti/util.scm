@@ -1,5 +1,5 @@
 ;; Tekuti
-;; Copyright (C) 2008 Andy Wingo <wingo at pobox dot com>
+;; Copyright (C) 2008, 2010 Andy Wingo <wingo at pobox dot com>
 
 ;; This program is free software; you can redistribute it and/or    
 ;; modify it under the terms of the GNU General Public License as   
@@ -25,11 +25,10 @@
 ;;; Code:
 
 (define-module (tekuti util)
-  #:use-module (match-bind)
-  #:use-module (scheme kwargs)
+  #:use-module (tekuti match-bind)
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-19)
-  #:export (expanduser match-lines dbg unwind-protect dbg dsu-sort
+  #:export (expanduser match-lines dbg unwind-protect dsu-sort
             hash-push! list-has-length? list-head-match mapn filter-mapn
             take-max read-hash write-hash shell:quote foldn
             call-with-temp-file emailish? urlish?

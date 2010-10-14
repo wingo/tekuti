@@ -27,7 +27,7 @@
 (define-module (tekuti request)
   #:use-module ((srfi srfi-1) #:select (find-tail fold))
   #:use-module (scheme kwargs)
-  #:use-module (match-bind)
+  #:use-module (tekuti match-bind)
   #:use-module (tekuti util)
   #:use-module (tekuti url)
   #:use-module (tekuti config)
