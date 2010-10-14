@@ -1,5 +1,5 @@
 ;; Tekuti
-;; Copyright (C) 2008 Andy Wingo <wingo at pobox dot com>
+;; Copyright (C) 2008, 2010 Andy Wingo <wingo at pobox dot com>
 
 ;; This program is free software; you can redistribute it and/or    
 ;; modify it under the terms of the GNU General Public License as   
@@ -72,6 +72,23 @@
     (method . ,(lambda (r)
                  (header-ref (rref r 'headers '()) "method" "GET")))))
 
+(define-syntax let-request
+  (lambda (stx)
+    (define (make-binding b)
+      (syntax-case b ()
+        ((id option ...)
+         (identifier? #'id)
+         #'(id (rref request-var 'id option ...)))
+        (id
+         (identifier? #'id)
+         #'(id (rref request-var 'id)))))
+    (syntax-case stx ()
+      ((_ request (binding ...) body ...)
+       (with-syntax (((binding ...) (map make-binding #'(binding ...))))
+         #'(let ((request-var request))
+             (let (binding ...)
+               body ...)))))))
+
 (define (request-form-data request)
   (let-request request (headers post-data)
     (if (string-null? post-data)
@@ -128,23 +145,6 @@
                                         (equal? pass *admin-pass*))
                                    #f)
                        #f)))))
-
-(define-syntax let-request
-  (lambda (stx)
-    (define (make-binding b)
-      (syntax-case b ()
-        ((id option ...)
-         (identifier? #'id)
-         #'(id (rref request-var 'id option ...)))
-        (id
-         (identifier? #'id)
-         #'(id (rref request-var 'id)))))
-    (syntax-case stx ()
-      ((_ request (binding ...) body ...)
-       (with-syntax (((binding ...) (map make-binding #'(binding ...))))
-         #'(let ((request-var request))
-             (let (binding ...)
-               body ...)))))))
 
 (define-syntax path-proc-case
   (lambda (stx)
