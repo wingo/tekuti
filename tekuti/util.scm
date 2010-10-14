@@ -58,6 +58,13 @@
              (apply kons knil (list-head values n))
              (list-tail values n))))
 
+(define-syntax unwind-protect
+  (syntax-rules ()
+    ((_ form cleanup0 cleanups ...)
+     (dynamic-wind (lambda () #t)
+                   (lambda () form)
+                   (lambda () cleanup0 cleanups ...)))))
+
 (define (call-with-temp-file contents proc)
   (let* ((template (string-copy "/tmp/tekutiXXXXXX"))
          (tmp (mkstemp! template)))
@@ -100,13 +107,6 @@
 
 (define (dbg fmt . args)
   (apply format (current-error-port) fmt args))
-
-(define-syntax unwind-protect
-  (syntax-rules ()
-    ((_ form cleanup0 cleanups ...)
-     (dynamic-wind (lambda () #t)
-                   (lambda () form)
-                   (lambda () cleanup0 cleanups ...)))))
 
 (define (dsu-sort list key less)
   (map cdr
@@ -158,32 +158,19 @@
         (if (null? l) (reverse dest)
             (loop (cdr l) (cons (car l) (cons elem dest)))))))
 
-(define (handle-error key . args)
-  (let ((cep (current-error-port))
-        (highlights (if (or (eq? key 'wrong-type-arg)
-                            (eq? key 'out-of-range))
-                        (list-ref args 3)
-                        '())))
-    (newline cep)
-    (display "Backtrace:\n")
-    (display-backtrace (fluid-ref the-last-stack) cep
-                       #f #f highlights)
-    (newline cep)
-    (if (= (length args) 4)
-        (apply display-error (fluid-ref the-last-stack) cep args)
-        (format cep "~a" args))
-    (force-output cep)
-    (apply throw key args)))
-
 (define (with-backtrace* proc)
-  (debug-enable 'backtrace)
-  (start-stack 'with-backtrace
-               (catch #t
-                      proc
-                      handle-error
-                      (lambda args
-                        (fluid-set! the-last-stack (make-stack #t 2 0))
-                        (apply throw args)))))
+  (let ((cep (current-error-port)))
+    (start-stack
+     'with-backtrace
+     (with-throw-handler
+      #t
+      proc
+      (lambda (k . args)
+        (newline cep)
+        (format cep "Throw to `~a', args: ~s\n" k args)
+        (display "Backtrace:\n" cep)
+        (display-backtrace (make-stack #t) cep)
+        (newline cep))))))
 
 (define-syntax with-backtrace
   (syntax-rules ()
