@@ -70,6 +70,7 @@
     opts))
 
 (define (boot args)
+  (setlocale LC_ALL)
   (let ((options (parse-options args)))
     (let ((config (option-ref options 'config #f)))
       (if config
