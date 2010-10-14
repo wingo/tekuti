@@ -113,6 +113,7 @@ Here is a short example:
       ((_ regex str vars consequent)
        #'(match-bind regex str vars consequent (if #f #f)))
       ((_ regex str vars consequent alternate)
+       (string? (syntax->datum #'regex))
        (let ((m #'m))
          (with-syntax ((m m)
                        (((var val) ...)

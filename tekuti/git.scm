@@ -334,11 +334,15 @@
 (define (with-output-to-blob* thunk)
   (git-hash-object (with-output-to-string thunk)))
 
-(define-macro (with-output-to-blob . forms)
-  `(,with-output-to-blob* (lambda () ,@forms)))
+(define-syntax with-output-to-blob
+  (syntax-rules ()
+    ((_ f f* ...)
+     (with-output-to-blob* (lambda () f f* ...)))))
 
 (define (with-input-from-blob* sha1 thunk)
   (with-input-from-string (git "show" sha1) thunk))
 
-(define-macro (with-input-from-blob sha1 . forms)
-  `(,with-input-from-blob* ,sha1 (lambda () ,@forms)))
+(define-syntax with-input-from-blob
+  (syntax-rules ()
+    ((_ sha1 f f* ...)
+     (with-input-from-blob* sha1 (lambda () f f* ...)))))

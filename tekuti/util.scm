@@ -97,13 +97,12 @@
 (define-syntax match-lines
   (syntax-rules ()
     ((_ string pattern bindings expr)
-     (let ((rx (irregex pattern)))
-       (fold
-        (lambda (line seed)
-          (match-bind rx line bindings
-                      (cons expr seed)
-                      seed))
-        '() (string-split string #\newline))))))
+     (fold
+      (lambda (line seed)
+        (match-bind pattern line bindings
+                    (cons expr seed)
+                    seed))
+      '() (string-split string #\newline)))))
 
 (define (dbg fmt . args)
   (apply format (current-error-port) fmt args))
