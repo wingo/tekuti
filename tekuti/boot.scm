@@ -29,15 +29,12 @@
 (define-module (tekuti boot)
   #:use-module (ice-9 format)
   #:use-module (ice-9 getopt-long)
-  #:use-module (ice-9 threads)
-  #:use-module (tekuti util)
   #:use-module (tekuti git)
   #:use-module (tekuti mod-lisp)
   #:export (boot))
 
-(define *option-grammar* '((gds)
+(define *option-grammar* '((listen)
                            (usage)
-                           (repl)
                            (config (value #t) (single-char #\c))
                            (version (single-char #\v))
                            (help (single-char #\h))))
@@ -53,7 +50,7 @@
           (map repr-option *option-grammar*)))
 
 (define (version)
-  (format #t "tekuti version 0.1" (car (program-arguments))))
+  (format #t "tekuti version 0.1"))
 
 ;; krap code
 (define (parse-options args)
@@ -68,11 +65,8 @@
         (begin
           (version)
           (exit 0)))
-    (if (option-ref opts 'gds #f)
-        (let ((run-utility (@ (ice-9 gds-client) run-utility)))
-          (make-thread
-           (lambda ()
-             (with-backtrace (run-utility))))))
+    (if (option-ref opts 'listen #f)
+        ((@ (system repl server) spawn-server)))
     opts))
 
 (define (boot args)
@@ -85,8 +79,4 @@
                (set-current-module config-module)
                (primitive-load config))))))
     (ensure-git-repo)
-    (if (option-ref options 'repl #f)
-        (begin (make-thread event-loop)
-               (scm-style-repl))
-        (event-loop))))
-
+    (event-loop)))
