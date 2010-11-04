@@ -141,7 +141,7 @@
     (syntax-case stx ()
       ((_ request (binding ...) body ...)
        (with-syntax (((binding ...) (map make-binding #'(binding ...))))
-         #`(let ((request-var request))
+         #'(let ((request-var request))
              (let (binding ...)
                body ...)))))))
 
@@ -187,7 +187,7 @@
     (syntax-case stx ()
       ((_ path clause ...)
        (with-syntax (((cond-clause ...) (map process-clause #'(clause ...))))
-         #`(let ((path-var path))
+         #'(let ((path-var path))
              (cond cond-clause ...)))))))
 
 (define (rcons*-fold request . keys-and-procs)
