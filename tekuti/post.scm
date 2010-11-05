@@ -125,12 +125,12 @@
   (dsu-sort
    (map (lambda (pair)
           (blob->comment (car pair) (cadr pair)))
-        (git-ls-tree (string-append (assq-ref post 'sha1) ":comments") #f))
+        (git-ls-tree (assq-ref post 'sha1) "comments"))
    comment-timestamp
    <))
 
 (define (post-n-comments post)
-  (length (git-ls-tree (string-append (assq-ref post 'sha1) ":comments") #f)))
+  (length (git-ls-tree (assq-ref post 'sha1) "comments")))
 
 (define (munge-post old-key parsed)
   (let ((metadata (with-output-to-blob
