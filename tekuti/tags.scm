@@ -1,5 +1,5 @@
 ;; Tekuti
-;; Copyright (C) 2008 Andy Wingo <wingo at pobox dot com>
+;; Copyright (C) 2008, 2010 Andy Wingo <wingo at pobox dot com>
 
 ;; This program is free software; you can redistribute it and/or    
 ;; modify it under the terms of the GNU General Public License as   
@@ -26,7 +26,7 @@
 
 (define-module (tekuti tags)
   #:use-module (tekuti util)
-  #:use-module (tekuti url)
+  #:use-module (web uri)
   #:use-module (tekuti config)
   #:use-module (tekuti post)
   #:use-module (tekuti git)
@@ -36,8 +36,10 @@
             reindex-tags))
 
 (define (tag-link tagname)
-  `(a (@ (href ,(string-append *public-url-base* "tags/"
-                               (url:encode tagname))))
+  `(a (@ (href ,(string-append
+                 "/" (encode-and-join-uri-path
+                      (append *public-path-base*
+                              (cons "tags" tagname))))))
       ,tagname))
 
 (define (compute-tags posts)
