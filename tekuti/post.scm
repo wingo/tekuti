@@ -109,10 +109,9 @@
         (raw (post-raw-content post)))
     (catch #t
            (lambda ()
-             (with-backtrace
-              (case format
-                ((wordpress) (wordpress->sxml raw))
-                (else `(pre ,raw)))))
+             (case format
+               ((wordpress) (wordpress->sxml raw))
+               (else `(pre ,raw))))
            (lambda args
              `(pre "Formatting error\n" ,raw)))))
 

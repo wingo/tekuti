@@ -1,5 +1,5 @@
 ;; Tekuti
-;; Copyright (C) 2008 Andy Wingo <wingo at pobox dot com>
+;; Copyright (C) 2008, 2010 Andy Wingo <wingo at pobox dot com>
 
 ;; This program is free software; you can redistribute it and/or    
 ;; modify it under the terms of the GNU General Public License as   
@@ -37,13 +37,12 @@
     (tags ,reindex-tags ,write-hash ,read-hash)))
 
 (define (reindex oldindex master)
-  (with-backtrace
-   (with-time-debugging
-    (fold (lambda (pair index)
-            (acons (car pair) ((cadr pair) oldindex index)
-                   index))
-          (acons 'master master '())
-          index-specs))))
+  (with-time-debugging
+   (fold (lambda (pair index)
+           (acons (car pair) ((cadr pair) oldindex index)
+                  index))
+         (acons 'master master '())
+         index-specs)))
 
 (define (assoc-list-ref alist key n default)
   (let ((l (assoc key alist)))
