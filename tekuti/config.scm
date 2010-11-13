@@ -30,15 +30,19 @@
   #:export (*host* *port* *backlog* *git-dir* *git* *public-url-base*
             *private-url-base* *debug* *admin-user* *admin-pass*
             *css-file* *navbar-links* *navbar-infix*
-            *title* *subtitle* *name*))
+            *title* *subtitle* *name*
+            *public-path-base* *private-path-base*
+            *server-impl* *server-impl-args*))
 
 (define *host* "127.0.0.1")
 (define *port* 8081)
 (define *backlog* 5)
 (define *git-dir* "~/blog.git")
 (define *git* "git")
-(define *public-url-base* "/blog/")
-(define *private-url-base* "/blog/")
+(define *public-url-base* "/")
+(define *private-url-base* "/")
+(define *public-path-base* '())
+(define *private-path-base* '())
 (define *css-file* "/base.css")
 (define *navbar-links* '())
 (define *navbar-infix* " ")
@@ -48,6 +52,9 @@
 (define *title* "My blog")
 (define *subtitle* "Just a blog, ok")
 (define *name* "Joe Schmo")
+
+(define *server-impl* 'http)
+(define *server-impl-args* '(#:host "127.0.0.1" #:port 8080))
 
 (define-parsed-entity! 'agrave 224)
 (define-parsed-entity! 'laquo 171)
