@@ -196,7 +196,7 @@
       commit)
      (else
       (pk "failed to update the ref, trying again..." refname)
-      (git-update-ref (git-rev-parse refname) (1- count))))))
+      (git-update-ref refname proc (1- count))))))
 
 (define (git-commit-tree tree parent message timestamp)
   (string-trim-both
@@ -221,8 +221,9 @@
      (run '() patch (list "patch" "-N" "-s" "-u" "-r" "/dev/null" orig))
      (with-output-to-blob
        (display
-        (call-with-input-file (orig)
-          (read-delimited "" port)))))))
+        (call-with-input-file orig
+          (lambda (port)
+            (read-delimited "" port))))))))
 
 ;; could leave stray comments if the post directory changes. but this is
 ;; probably the best that we can do, given that git does not track
@@ -280,7 +281,7 @@
 
 (define (munge-tree1-recursive dents command ldir rdir arg)
   (define (command-error why)
-    (error "munge-tree1-recursive error" why command dir arg))
+    (error "munge-tree1-recursive error" why command ldir rdir arg))
   (let ((dent (assoc ldir dents)))
     (if (and dent (not (eq? (caddr dent) 'tree)))
         (command-error 'not-a-tree))
