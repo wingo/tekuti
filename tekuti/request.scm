@@ -25,126 +25,69 @@
 ;;; Code:
 
 (define-module (tekuti request)
-  #:use-module ((srfi srfi-1) #:select (find-tail fold))
+  #:use-module ((srfi srfi-1) #:select (find-tail))
   #:use-module (tekuti match-bind)
   #:use-module (tekuti util)
-  #:use-module (tekuti url)
+  #:use-module (web uri)
+  #:use-module (web request)
+  #:use-module (rnrs bytevectors)
   #:use-module (tekuti config)
   #:use-module (tekuti base64)
-  #:use-module (rnrs bytevectors)
-  #:export (make-request rcons rcons* rpush rpush* rref let-request
-            request-path-case request-authenticated?
-            request-form-data request-server-name))
-
-(define (header-ref headers key default)
-  (let ((pair (assoc key headers)))
-    (if pair
-        (cdr pair)
-        default)))
+  #:export (request-relative-path
+            request-relative-path-str
+            request-query-ref
+            request-path-case
+            request-authenticated?
+            request-form-data))
 
 (define (parse-www-form-urlencoded str)
   (map
    (lambda (piece)
      (let ((equals (string-index piece #\=)))
        (if equals
-           (cons (url:decode (substring piece 0 equals))
-                 (url:decode (substring piece (1+ equals))))
-           (cons (url:decode piece) ""))))
+           (cons (uri-decode (substring piece 0 equals))
+                 (uri-decode (substring piece (1+ equals))))
+           (cons (uri-decode piece) ""))))
    (string-split str #\&)))
 
-(define *request-initializers*
-  `((path . ,(lambda (r)
-               (let ((private-url-path (url:path-split *private-url-base*))
-                     (path (header-ref (rref r 'headers '())
-                                       "url" *private-url-base*)))
-                 (let* ((tail (list-head-match private-url-path
-                                               (url:path-split path)
-                                               (length private-url-path))))
-                   (or tail (error "unexpected path" path *private-url-base*))
-                   tail))))
-    (path-str . ,(lambda (r)
-                   (url:path-join (rref r 'path '()))))
-    (query . ,(lambda (r)
-                (or (and=> (url:query-part
-                            (header-ref (rref r 'headers '()) "url" ""))
-                           parse-www-form-urlencoded)
-                    '())))
-    (method . ,(lambda (r)
-                 (header-ref (rref r 'headers '()) "method" "GET")))))
+(define (request-relative-path r)
+  (let ((base *private-path-base*)
+        (path (split-and-decode-uri-path (uri-path (request-uri r)))))
+    (let ((tail (list-head-match base path (length base))))
+      (or tail
+          (error "unexpected path" path base)))))
 
-(define-syntax let-request
-  (lambda (stx)
-    (define (make-binding b)
-      (syntax-case b ()
-        ((id option ...)
-         (identifier? #'id)
-         #'(id (rref request-var 'id option ...)))
-        (id
-         (identifier? #'id)
-         #'(id (rref request-var 'id)))))
-    (syntax-case stx ()
-      ((_ request (binding ...) body ...)
-       (with-syntax (((binding ...) (map make-binding #'(binding ...))))
-         #'(let ((request-var request))
-             (let (binding ...)
-               body ...)))))))
+(define (request-relative-path-str r)
+  (encode-and-join-uri-path (request-relative-path r)))
 
-(define (request-form-data request)
-  (let-request request (headers post-data)
-    (if (string-null? post-data)
-        '()
-        (let ((content-type (assoc-ref headers "content-type")))
-          (cond
-           ((equal? content-type "application/x-www-form-urlencoded")
-            (parse-www-form-urlencoded post-data))
-           (else
-            (error "bad content-type" content-type)))))))
-
-(define (make-request . keys-and-values)
-  (fold (lambda (pair r)
-          (rcons (car pair) ((cdr pair) r) r))
-        (apply rcons* '() keys-and-values)
-        *request-initializers*))
-
-(define (rcons k v request)
-  (or (symbol? k) (error "request keys should be symbols"))
-  (acons k v request))
-
-(define (rcons* request . keys-and-values)
-  (let lp ((request request) (kv keys-and-values))
-    (if (null? kv)
-        request
-        (lp (rcons (car kv) (cadr kv) request) (cddr kv)))))
-
-(define (rpush k v request)
-  (rcons k (cons v (rref request k '())) request))
-
-(define (rpush* request . keys-and-values)
-  (let lp ((request request) (kv keys-and-values))
-    (if (null? kv)
-        request
-        (lp (rpush (car kv) (cadr kv) request) (cddr kv)))))
-
-(define* (rref request k #:optional (default #f) #:key (default-proc #f))
-  (let ((pair (assq k request)))
+(define (request-query-ref r param default)
+  (let ((q (uri-query (request-uri r))))
     (cond
-     (pair (cdr pair))
-     (default-proc (default-proc request k))
+     ((and q (assoc param (parse-www-form-urlencoded q))) => cdr)
      (else default))))
+
+(define (request-form-data request body)
+  (if (or (not body) (string-null? body))
+      '()
+      (let ((content-type (request-content-type request)))
+        (cond
+         ((equal? content-type '("application" "x-www-form-urlencoded"))
+          (parse-www-form-urlencoded body))
+         (else
+          (error "bad content-type" content-type))))))
 
 ;; danger here, regarding the optional alternate clauses...
 (define (request-authenticated? request)
-  (let ((headers (rref request 'headers '())))
-    (let ((auth (assoc-ref headers "authorization")))
-      (and auth
-           (match-bind "^Basic ([A-Za-z0-9+/=]*)$" auth (_ b64)
-                       (match-bind "^([^:]*):(.*)$"
-                                   (utf8->string (base64-decode b64))
-                                   (_ user pass)
-                                   (and (equal? user *admin-user*)
-                                        (equal? pass *admin-pass*))
-                                   #f)
-                       #f)))))
+  (let ((auth (request-authorization request)))
+    (and auth
+         (match-bind "^Basic ([A-Za-z0-9+/=]*)$" auth (_ b64)
+                     (match-bind "^([^:]*):(.*)$"
+                                 (utf8->string (base64-decode b64))
+                                 (_ user pass)
+                                 (and (equal? user *admin-user*)
+                                      (equal? pass *admin-pass*))
+                                 #f)
+                     #f))))
 
 (define-syntax path-proc-case
   (lambda (stx)
@@ -191,22 +134,10 @@
          #'(let ((path-var path))
              (cond cond-clause ...)))))))
 
-(define (rcons*-fold request . keys-and-procs)
-  (foldn (lambda (request k proc)
-           (rcons k (proc request) request))
-         2 request keys-and-procs))
-
 (define-syntax request-path-case
   (syntax-rules ()
     ((_ request clause ...)
-     (path-proc-case
-       (let-request request (method path)
-                    (cons method path))
-       clause ...))))
-
-(define (request-server-name request)
-  (let ((headers (rref request 'headers)))
-    (or (assoc-ref headers "host")
-        (assoc-ref headers "server-ip-addr"))))
-
-
+     (let ((r request))
+       (path-proc-case
+        (cons (symbol->string (request-method r)) (request-relative-path r))
+        clause ...)))))

@@ -1,5 +1,5 @@
 ;; Tekuti
-;; Copyright (C) 2008 Andy Wingo <wingo at pobox dot com>
+;; Copyright (C) 2008, 2010 Andy Wingo <wingo at pobox dot com>
 
 ;; This program is free software; you can redistribute it and/or    
 ;; modify it under the terms of the GNU General Public License as   
@@ -25,54 +25,13 @@
 ;;; Code:
 
 (define-module (tekuti web)
-  #:use-module (sxml simple)
-  #:use-module (sxml transform)
-  #:use-module (tekuti url)
+  #:use-module (web server)
   #:use-module (tekuti request)
-  #:use-module (tekuti template)
+  #:use-module (tekuti index)
   #:use-module (tekuti page)
-  #:use-module (srfi srfi-1)
-  #:export (header-ref
-            handle-request))
+  #:use-module (tekuti config)
+  #:export (main-loop))
             
-(define *status-names*
-  '((200 . "OK")
-    (201 . "Created")
-    (303 . "See Other")
-    (304 . "Not Modified")
-    (401 . "Unauthorized")
-    (404 . "Not Found")
-    (500 . "Internal Server Error")))
-
-(define (status->string status)
-  (format #f "~a ~a" status (or (assv-ref *status-names* status)
-                                "Unknown Error")))
-
-(define xhtml-doctype
-  (string-append
-   "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\" "
-   "\"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\">\n"))
-
-(define (make-output request)
-  (lambda (port)
-    (let ((sxml (or (rref request 'sxml #f)
-                    (templatize request))))
-      (if sxml
-          (begin (display (rref request 'doctype "") port)
-                 (sxml->xml sxml port))
-          (display "" port)))))
-
-(define (finalize request)
-  ;; update output headers
-  ;; templatize body
-  (rpush* (rcons 'output (make-output request) request)
-          'output-headers
-          (cons "Status" (status->string (rref request 'status 200)))
-          'output-headers
-          (cons "Content-Type"
-                (string-append (rref request 'content-type "text/html")
-                               "; charset=utf-8"))))
-
 (define (choose-handler request)
   (request-path-case
    request
@@ -98,6 +57,17 @@
    ((GET debug) page-debug)
    (else page-not-found)))
 
-(define (handle-request request index)
-  (let ((handler (choose-handler request)))
-    (finalize (handler (rcons 'doctype xhtml-doctype request) index))))
+(define (handler request body index)
+  (let ((index (maybe-reindex index)))
+    (call-with-values (lambda ()
+                        ((choose-handler request) request body (cdr index)))
+      (lambda (response body)
+        (values response body index)))))
+
+;; The seemingly useless lambda is to allow for `handler' to be
+;; redefined at runtime.
+(define (main-loop)
+  (run-server (lambda (r b i) (handler r b i))
+              *server-impl*
+              *server-impl-args*
+              (read-index)))

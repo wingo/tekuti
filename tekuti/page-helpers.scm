@@ -25,31 +25,116 @@
 ;;; Code:
 
 (define-module (tekuti page-helpers)
+  #:use-module (sxml simple)
+  #:use-module (web uri)
+  #:use-module (web http)
+  #:use-module (web response)
   #:use-module (tekuti config)
   #:use-module (tekuti util)
   #:use-module (tekuti git)
   #:use-module (tekuti post)
   #:use-module (tekuti tags)
   #:use-module (tekuti comment)
-  #:use-module (tekuti url)
   #:use-module (tekuti request)
+  #:use-module (tekuti template)
   #:use-module (srfi srfi-19)
-  #:export (relurl rellink redirect post-url
+  #:export (respond
+            relurl rellink
+            post-url
             published-posts
             post-editing-form
             sidebar-ul top-tags tag-cloud
             main-sidebar post-sidebar related-tag-cloud
-            post-link admin-post-link admin-post-redirect
+            post-link admin-post-url admin-post-link
             show-post with-authentication
             find-posts-matching
             atom-header atom-entry))
 
-(define (relurl . paths)
-  (apply string-append *public-url-base* paths))
+(define xhtml-doctype
+  (string-append
+   "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\" "
+   "\"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\">\n"))
 
-(define (rellink path . body)
-  `(a (@ (href ,(relurl path)))
-      ,@body))
+(define (acons* tail . args) 
+  (let lp ((tail tail) (args args))
+    (if (null? args)
+        tail
+        (let ((k (car args)) (v (cadr args)))
+          (lp (if v (acons k v tail) tail)
+              (cddr args))))))
+
+(define* (respond #:optional body #:key
+                  redirect
+                  (status (if redirect 302 200))
+                  (title *title*)
+                  last-modified
+                  (doctype xhtml-doctype)
+                  (content-type-params '(("charset" . "utf-8")))
+                  (content-type "text/html")
+                  (extra-headers '())
+                  (sxml (templatize #:title title #:body body)))
+  (values (build-response
+           #:code status
+           #:headers (acons*
+                      extra-headers
+                      'location redirect
+                      'last-modified last-modified
+                      'content-type (cons content-type content-type-params)))
+          (lambda (port)
+            (if sxml
+                (begin
+                  (display doctype port)
+                  (sxml->xml sxml port))))))
+
+(define (unparse-www-form-urlencoded alist)
+  (string-join (map (lambda (pair)
+                      (if (cdr pair)
+                          (string-append (uri-encode (car pair))
+                                         "="
+                                         (uri-encode (cdr pair)))
+                          (uri-encode (car pair))))
+                    alist)
+               "&"))
+
+(define* (relative-url uri path-components #:key query fragment)
+  (unparse-uri
+   (build-uri (uri-scheme uri)
+              #:userinfo (uri-userinfo uri) #:host (uri-host uri) 
+              #:port (uri-port uri)
+              #:path (encode-and-join-uri-path
+                      (append (split-and-decode-uri-path (uri-path uri))
+                              path-components))
+              #:query (and=> query unparse-www-form-urlencoded)
+              #:fragment fragment)))
+
+(define* (relative-link uri path-components text #:key query fragment)
+  `(a (@ (href ,(relative-url uri path-components #:query query
+                              #:fragment fragment)))
+      ,@text))
+
+(define* (relative-path base path-components #:key query fragment)
+  (let ((path (encode-and-join-uri-path (append base path-components)))
+        (query (and=> query unparse-www-form-urlencoded)))
+    (if query
+        (if fragment
+            (string-append "/" path "?" query "#" fragment)
+            (string-append "/" path "?" query))
+        (if fragment
+            (string-append "/" path "#" fragment)
+            (string-append "/" path)))))
+
+(define* (relative-path-link base path-components text #:key query fragment)
+  `(a (@ (href ,(relative-path base path-components #:query query
+                               #:fragment fragment)))
+      ,text))
+
+(define* (relurl path-components #:key query fragment)
+  (relative-path *public-path-base* path-components #:query query
+                 #:fragment fragment))
+
+(define* (rellink path-components text #:key query fragment)
+  (relative-path-link *public-path-base* path-components text #:query query
+                      #:fragment fragment))
 
 (define (published-posts index n)
   (filter-mapn (lambda (post)
@@ -60,10 +145,9 @@
 (define (post-editing-form post)
   `(div
     (form (@ (method "POST")
-             (action ,(relurl (if post
-                                  (string-append "admin/modify-post/"
-                                                 (url:encode (post-key post)))
-                                  "admin/new-post"))))
+             (action ,(if post
+                          (relurl `("admin" "modify-post" ,(post-key post)))
+                          (relurl '("admin" "new-post")))))
           (p (input (@ (name "title") (type "text")
                        (value ,(if post (post-title post) ""))))
              (label (@ (for "title")) " <- title"))
@@ -97,18 +181,21 @@
   `(div (@ (id "menu"))
         (ul ,@body)))
 
-;; double-encoding is a hack to trick apache
 (define (admin-post-url post)
-  (relurl "admin/posts/" (url:encode (post-key post))))
+  (relurl `("admin" "posts" ,(post-key post))))
 
 (define (admin-post-link post)
   `(a (@ (href ,(admin-post-url post))) ,(post-title post)))
 
-(define (post-url post . tail)
-  (apply relurl "archives/" (url:decode (post-key post)) tail))
+(define* (post-url post #:key fragment)
+  (relative-path *public-path-base*
+                 (cons "archives"
+                       (split-and-decode-uri-path (uri-decode (post-key post))))
+                 #:fragment fragment))
 
-(define (post-link post . tail)
-  `(a (@ (href ,(apply post-url post tail))) ,(post-title post)))
+(define* (post-link post #:key fragment)
+  `(a (@ (href ,(post-url post #:fragment fragment)))
+      ,(post-title post)))
 
 (define (comment-form post author email url comment)
   `(form
@@ -154,8 +241,7 @@
                  ,(comment-form post "" "" "" ""))))))
 
 (define (tag-link tagname)
-  (rellink (string-append "tags/" (url:encode tagname))
-           tagname))
+  (rellink `("tags" ,tagname) tagname))
 
 (define (show-post post comments?)
   `((h2 (@ (class "storytitle"))
@@ -172,18 +258,11 @@
          ,@(if comments?
                '()
                `((div (@ (class "feedback"))
-                      (a (@ (href ,(post-url post "#comments")))
+                      (a (@ (href ,(post-url post #:fragment "comments")))
                          "(" ,(post-n-comments post) ")")))))
     ,@(if comments?
           (list (post-sxml-comments post))
           '())))
-
-(define (redirect request location)
-  (rpush 'output-headers (cons "Location" location)
-         (rcons 'status 302 request)))
-
-(define (admin-post-redirect request post)
-  (redirect request (admin-post-url post)))
 
 (define (top-tags index n)
   (let ((hash (assq-ref index 'tags)))
@@ -205,7 +284,7 @@
            counts)))
   (list-intersperse
    (map (lambda (name size)
-          `(a (@ (href ,(relurl "tags/" (url:encode name)))
+          `(a (@ (href ,(relurl `("tags" ,name)))
                  (rel "tag")
                  (style ,(format #f "font-size: ~d%" size)))
               ,name))
@@ -215,25 +294,25 @@
 
 (define (main-sidebar request index)
   (sidebar-ul
-   `((li (h2 (a (@ (href ,(relurl "feed/atom")))
+   `((li (h2 (a (@ (href ,(relurl '("feed" "atom"))))
                 "subscribe "
-                (img (@ (src ,(relurl "wp-content/feed-icon-14x14.png"))
+                (img (@ (src ,(relurl '("wp-content" "feed-icon-14x14.png")))
                         (alt "[feed]")))
                 )))
      (li (h2 "search")
          (form (@ (method "POST")
-                  (action ,(relurl "search")))
+                  (action ,(relurl '("search"))))
                (input (@ (name "string") (type "text") (size "15")
                          (value "")))))
-     (li (h2 "tags " ,(rellink "tags/" ">>"))
+     (li (h2 "tags " ,(rellink '("tags") ">>"))
          (ul (li (@ (style "line-height: 150%"))
                  ,@(tag-cloud (top-tags index 30))))))))
 
 (define (post-sidebar post index)
   (sidebar-ul
-   `((li (h2 (a (@ (href ,(relurl "feed/atom")))
+   `((li (h2 (a (@ (href ,(relurl '("feed" "atom"))))
                 "subscribe "
-                (img (@ (src ,(relurl "wp-content/feed-icon-14x14.png"))
+                (img (@ (src ,(relurl '("wp-content" "feed-icon-14x14.png")))
                         (alt "[feed]")))
                 )))
      (li (h2 "related")
@@ -264,17 +343,17 @@
 (define (with-authentication request thunk)
   (if (request-authenticated? request)
       (thunk)
-      (rcons* (rpush 'output-headers
-                     '("WWW-Authenticate" . "Basic realm=\"Tekuti\"")
-                     request)
-              'status 401
-              'body `((p "Authentication required, yo")))))
+      (respond `((p "Authentication required, yo"))
+               #:status 401
+               #:extra-headers '((www-authenticate . "Basic realm=\"Tekuti\"")))))
 
 (define (atom-header server-name last-modified)
-  (define (relurl tail)
-    (string-append "http://" server-name *public-url-base* tail))
+  (define (relurl . tail)
+    (string-append "http://" server-name "/"
+                   (encode-and-join-uri-path
+                    (append *public-path-base* tail))))
   `(feed
-     (@ (xmlns "http://www.w3.org/2005/Atom") (xml:base ,(relurl "")))
+     (@ (xmlns "http://www.w3.org/2005/Atom") (xml:base ,(relurl)))
      (title (@ (type "text")) ,*title*)
      (subtitle (@ (type "text")) ,*subtitle*)
      ,@(if last-modified
@@ -284,20 +363,25 @@
                    (version "what"))
                 "tekuti")
      (link (@ (rel "alternate") (type "text/html")
-              (href ,(relurl ""))))
-     (id ,(relurl "feed/atom"))
+              (href ,(relurl))))
+     (id ,(relurl "feed" "atom"))
      (link (@ (rel "self") (type "application/atom+xml")
-              (href ,(relurl "feed/atom"))))))
+              (href ,(relurl "feed" "atom"))))))
 
 (define (atom-entry server-name post)
   (define (relurl . tail)
-    (apply string-append "http://" server-name *public-url-base* tail))
+    (string-append "http://" server-name "/"
+                   (encode-and-join-uri-path
+                    (append *public-path-base* tail))))
   `(entry
-    (author (name ,*name*) (uri ,(relurl "")))
+    (author (name ,*name*) (uri ,(relurl)))
     (title (@ (type "text")) ,(post-title post))
-    (id ,(relurl (url:decode (post-key post)))) ;hack -- should include archives...
+    (id ,(apply relurl
+                ;; hack -- should include archives...
+                (split-and-decode-uri-path (uri-decode (post-key post)))))
     (link (@ (rel "alternate") (type "text/html")
-             (href ,(relurl "archives/" (url:decode (post-key post))))))
+             (href ,(apply relurl "archives" (split-and-decode-uri-path
+                                              (uri-decode (post-key post)))))))
     (published ,(timestamp->atom-date (post-timestamp post)))
     (updated ,(timestamp->atom-date (post-timestamp post)))
     (content (@ (type "xhtml"))

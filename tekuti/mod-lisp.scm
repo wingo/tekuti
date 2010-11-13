@@ -1,5 +1,5 @@
 ;; Tekuti
-;; Copyright (C) 2008 Andy Wingo <wingo at pobox dot com>
+;; Copyright (C) 2008, 2010 Andy Wingo <wingo at pobox dot com>
 
 ;; This program is free software; you can redistribute it and/or    
 ;; modify it under the terms of the GNU General Public License as   
@@ -20,102 +20,196 @@
 
 ;;; Commentary:
 ;;
-;; This is the main script that will launch tekuti.
+;; Web server implementation for mod-lisp.
 ;;
 ;;; Code:
 
 (define-module (tekuti mod-lisp)
   #:use-module (ice-9 rdelim)
-  #:use-module (tekuti config)
-  #:use-module (tekuti util)
-  #:use-module (tekuti index)
-  #:use-module (tekuti request)
-  #:use-module (tekuti web)
-  #:export (event-loop))
+  #:use-module (system repl error-handling)
+  #:use-module (rnrs bytevectors)
+  #:use-module (web http)
+  #:use-module (web request)
+  #:use-module (web response)
+  #:use-module (web server))
+
 
 ;;; FIXME: ignore SIGPIPE, otherwise apache dying will kill us
 
-(define (read-headers socket)
+(define *mod-lisp-headers* (make-hash-table))
+
+(define (define-mod-lisp-header! sym name parser)
+  (hash-set! *mod-lisp-headers* name (cons sym parser)))
+
+(define (mod-lisp-sym-and-parser name)
+  (hash-ref *mod-lisp-headers* name))
+
+(define-mod-lisp-header! 'server-protocol
+  "server-protocol"
+  parse-http-version)
+
+(define-mod-lisp-header! 'method
+  "method"
+  parse-http-method)
+
+(define-mod-lisp-header! 'url
+  "URL"
+  parse-request-uri)
+
+(define-mod-lisp-header! 'server-ip-addr
+  "server-ip-addr"
+  identity)
+
+(define-mod-lisp-header! 'server-ip-port
+  "server-ip-port"
+  string->number)
+
+(define-mod-lisp-header! 'remote-ip-addr
+  "remote-ip-addr"
+  identity)
+
+(define-mod-lisp-header! 'remote-ip-port
+  "remote-ip-port"
+  string->number)
+
+(define-mod-lisp-header! 'server-id
+  "server-id"
+  identity)
+
+(define-mod-lisp-header! 'server-ip-addr
+  "server-ip-addr"
+  identity)
+
+(define-mod-lisp-header! 'server-baseversion
+  "server-baseversion"
+  identity)
+
+(define-mod-lisp-header! 'modlisp-version
+  "modlisp-version"
+  identity)
+
+(define-mod-lisp-header! 'modlisp-major-version
+  "modlisp-major-version"
+  string->number)
+
+(define (read-headers/mod-lisp socket)
   (define (read-line*)
     (let ((line (read-line socket)))
       (if (eof-object? line)
           (error "unexpected eof")
           line)))
-  (let lp ((keys '()) (values '()))
+  (let lp ((headers '()) (meta '()))
     (let ((k (read-line*)))
       (if (string=? k "end")
-          (reverse (map cons keys values))
-          (lp (cons (string-downcase k) keys)
-              (cons (read-line*) values))))))
+          (values (reverse! headers) (reverse! meta))
+          (let ((sym-and-parser (mod-lisp-sym-and-parser k))
+                (v (read-line*)))
+            (if sym-and-parser
+                (lp headers
+                    (acons (car sym-and-parser)
+                           ((cdr sym-and-parser) v)
+                           meta))
+                (call-with-values (lambda () (parse-header k v))
+                  (lambda (k v)
+                    (lp (acons k v headers) meta)))))))))
 
-(define (read-chars nchars port)
-  (let ((buf (make-string nchars)))
-    (read-delimited! "" buf port)
-    buf))
+(define (read-request/mod-lisp port)
+  (call-with-values (lambda () (read-headers/mod-lisp port))
+    (lambda (headers meta)
+      (build-request
+       #:method (assq-ref meta 'method)
+       #:uri (assq-ref meta 'url)
+       #:version (assq-ref meta 'url)
+       #:headers headers
+       #:meta meta
+       #:port port))))
 
-(define (write-headers headers port)
+(define (write-header/mod-lisp name val port)
+  (if (string? name)
+      ;; assume that it's a header we don't know about...
+      (begin
+        (display name port) (newline port)
+        (display val port) (newline port))
+      (let ((decl (lookup-header-decl name)))
+        (if (not decl)
+            (error "Unknown header" name)
+            (begin
+              (display (header-decl-name decl) port) (newline port)
+              ((header-decl-writer decl) val port) (newline port))))))
+
+(define (write-response-line/mod-lisp code phrase port)
+  (write-header/mod-lisp "Status"
+                         (string-append (number->string code) " " phrase)
+                         port))
+
+(define (write-headers/mod-lisp headers port)
   (for-each
-   (lambda (pair)
-     (format port "~a\n~a\n" (car pair) (cdr pair)))
-   headers)
-  (display "end\n" port))
+   (lambda (pair) 
+     (write-header (car pair) (cdr pair) port))
+   headers))
 
-(define (write-body request socket)
-  ((rref request 'output error) socket))
+(define (write-response/mod-lisp r port)
+  (write-response-line/mod-lisp (response-code r)
+                                (response-reason-phrase r) port)
+  (write-headers (response-headers r) port)
+  (display "end" port) (newline port)
+  (if (eq? port (response-port r))
+      r
+      (build-response #:version (response-version r)
+                      #:code (response-code r)
+                      #:reason-phrase (response-reason-phrase r)
+                      #:headers (response-headers r)
+                      #:port port)))
 
-(define (request-output-headers request)
-  (rref request 'output-headers '()))
+(define (make-default-socket family addr port)
+  (let ((sock (socket PF_INET SOCK_STREAM 0)))
+    (setsockopt sock SOL_SOCKET SO_REUSEADDR 1)
+    (bind sock family addr port)
+    sock))
 
-(define (connection-received socket sockaddr index)
-  (let* ((headers (read-headers socket))
-         (post-data (read-chars (string->number
-                                 (or (assoc-ref headers "content-length")
-                                     "0"))
-                                socket)))
-    (catch
-     #t
-     (lambda ()
-       (let ((res (handle-request (make-request 'headers headers
-                                                'post-data post-data)
-                                  index)))
-         (write-headers (request-output-headers res) socket)
-         (write-body res socket)))
-     (lambda args
-       (write-headers '(("Status" . "500 Internal Server Error")
-                        ("Content-Type" . "text/plain"))
-                      socket)
-       (display "Sorry bub, had an error. Please let the admin know. Thanks!\n"
-                socket)
-       (write headers) (newline)
-       (write args) (newline)
-       (backtrace))
-     (lambda args
-       (fluid-set! the-last-stack (make-stack #t 2 0))
-       (apply throw args)))
-             
-    (close-port socket)))
+;; -> server
+(define* (mod-lisp-open #:key
+                        (host #f)
+                        (family AF_INET)
+                        (addr (if host
+                                  (inet-pton family host)
+                                  INADDR_LOOPBACK))
+                        (port 8080)
+                        (socket (make-default-socket family addr port)))
+  (listen socket 5)
+  socket)
 
-(define (with-socket proc)
-  (pk 'listening)
-  (let ((socket (socket PF_INET SOCK_STREAM 0)))
-    (setsockopt socket SOL_SOCKET SO_REUSEADDR 1)
-    (bind socket AF_INET (inet-aton *host*) *port*)
-    (listen socket *backlog*)
-    (unwind-protect
-     (proc socket)
-     (shutdown socket 2))))
+;; For mod-lisp, we don't do keep-alive.
+(define (keep-alive? response)
+  #f)
 
-(define (inner-loop socket index)
-  (let* ((pair (accept socket))
-         (fd (car pair))
-         (sockaddr (cdr pair))
-         (new-index (maybe-reindex index)))
-    (connection-received fd sockaddr (cdr new-index))
-    (inner-loop socket new-index)))
+;; -> (keep-alive client request body | keep-alive #f #f #f)
+(define (mod-lisp-read server keep-alive)
+  (let* ((client (accept server))
+         (req (read-request/mod-lisp (car client)))
+         (body-str (read-request-body/latin-1 req)))
+    (values keep-alive (car client) req body-str)))
 
-(define (event-loop)
-  (with-socket
-   (lambda (socket)
-     (format #t "entering inner loop\n")
-     (inner-loop socket (read-index)))))
+;; -> (#f | client)
+(define (mod-lisp-write server client response body)
+  (let ((response (write-response/mod-lisp response client)))
+    (cond
+     ((not body))                       ; pass
+     ((string? body)
+      (write-response-body/latin-1 response body))
+     ((bytevector? body)
+      (write-response-body/bytevector response body))
+     (else
+      (error "Expected a string or bytevector for body" body)))
+    (close-port (response-port response))
+    #f))
 
+;; -> unspecified values
+(define (mod-lisp-close server)
+  (close-port server))
+
+(define-server-impl mod-lisp
+  mod-lisp-open
+  mod-lisp-read
+  mod-lisp-write
+  mod-lisp-close)

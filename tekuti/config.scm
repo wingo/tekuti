@@ -27,20 +27,15 @@
 (define-module (tekuti config)
   #:use-module (tekuti util)
   #:use-module ((sxml ssax) #:select (define-parsed-entity!))
-  #:export (*host* *port* *backlog* *git-dir* *git* *public-url-base*
-            *private-url-base* *debug* *admin-user* *admin-pass*
+  #:export (*host* *git-dir* *git* *debug* *admin-user* *admin-pass*
             *css-file* *navbar-links* *navbar-infix*
             *title* *subtitle* *name*
             *public-path-base* *private-path-base*
             *server-impl* *server-impl-args*))
 
 (define *host* "127.0.0.1")
-(define *port* 8081)
-(define *backlog* 5)
 (define *git-dir* "~/blog.git")
 (define *git* "git")
-(define *public-url-base* "/")
-(define *private-url-base* "/")
 (define *public-path-base* '())
 (define *private-path-base* '())
 (define *css-file* "/base.css")

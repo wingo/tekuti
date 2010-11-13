@@ -1,5 +1,5 @@
 ;; Tekuti
-;; Copyright (C) 2008 Andy Wingo <wingo at pobox dot com>
+;; Copyright (C) 2008, 2010 Andy Wingo <wingo at pobox dot com>
 
 ;; This program is free software; you can redistribute it and/or    
 ;; modify it under the terms of the GNU General Public License as   
@@ -30,7 +30,7 @@
   #:use-module (ice-9 format)
   #:use-module (ice-9 getopt-long)
   #:use-module (tekuti git)
-  #:use-module (tekuti mod-lisp)
+  #:use-module (tekuti web)
   #:export (boot))
 
 (define *option-grammar* '((listen)
@@ -80,4 +80,4 @@
                (set-current-module config-module)
                (primitive-load config))))))
     (ensure-git-repo)
-    (event-loop)))
+    (main-loop)))
