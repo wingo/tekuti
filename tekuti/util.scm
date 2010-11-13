@@ -34,8 +34,8 @@
             call-with-temp-file emailish? urlish?
             date-increment date-comparator date-before? date-after? compose1
             rfc822-date->timestamp timestamp->rfc822-date timestamp->atom-date
-            timestamp->date string-split/trimming
-            list-intersperse with-backtrace with-time-debugging))
+            date->timestamp timestamp->date string-split/trimming
+            list-intersperse with-time-debugging))
 
 (define (emailish? x)
   (match-bind "^([a-zA-Z0-9._+-]+)@([a-zA-Z0-9-]+\\.)+[a-zA-Z]+$"
@@ -157,25 +157,6 @@
         (if (null? l) (reverse dest)
             (loop (cdr l) (cons (car l) (cons elem dest)))))))
 
-(define (with-backtrace* proc)
-  (let ((cep (current-error-port)))
-    (start-stack
-     'with-backtrace
-     (with-throw-handler
-      #t
-      proc
-      (lambda (k . args)
-        (newline cep)
-        (format cep "Throw to `~a', args: ~s\n" k args)
-        (display "Backtrace:\n" cep)
-        (display-backtrace (make-stack #t) cep)
-        (newline cep))))))
-
-(define-syntax with-backtrace
-  (syntax-rules ()
-    ((_ form0 forms ...)
-     (with-backtrace* (lambda () form0 forms ...)))))
-
 (define (gettimeofday-diff prev)
   (let ((now (gettimeofday)))
    (+ (- (car now) (car prev))
@@ -247,6 +228,9 @@
 
 (define (timestamp->date timestamp)
   (time-utc->date (make-time time-utc 0 timestamp) 0))
+
+(define (date->timestamp date)
+  (time-second (date->time-utc date)))
 
 (define (timestamp->atom-date timestamp)
   (date->string (timestamp->date timestamp)
