@@ -1,5 +1,5 @@
 ;; Tekuti
-;; Copyright (C) 2008 Andy Wingo <wingo at pobox dot com>
+;; Copyright (C) 2008, 2010 Andy Wingo <wingo at pobox dot com>
 
 ;; This program is free software; you can redistribute it and/or    
 ;; modify it under the terms of the GNU General Public License as   
@@ -25,13 +25,16 @@
 ;;; Code:
 
 (define-module (tekuti template)
-  #:use-module (tekuti request)
+  #:use-module (web uri)
   #:use-module (tekuti config)
   #:export (templatize))
 
-(define (templatize request)
+(define* (templatize #:key
+                     (title *title*)
+                     (body '((p "(missing content?)"))))
   (define (href . args)
-    `(href ,(apply string-append *public-url-base* args)))
+    `(href ,(string-append "/" (encode-and-join-uri-path
+                                (append *public-path-base* args)))))
   (define (list-join l infix)
     "Infixes @var{infix} into list @var{l}."
     (if (null? l) l
@@ -47,7 +50,7 @@
                        *navbar-links*)
                   *navbar-infix*)))))
   `(html
-    (head (title ,(rref request 'title *title*))
+    (head (title ,title)
           (meta (@ (name "Generator")
                    (content "An unholy concoction of parenthetical guile")))
           (link (@ (rel "stylesheet")
@@ -59,8 +62,7 @@
           (h1 (@ (id "header"))
               (a (@ ,(href "")) ,*title*))
           ,@(make-navbar)
-          (div (@ (id "content"))
-               ,@(rref request 'body '((p "(missing content?)"))))
+          (div (@ (id "content")) ,@body)
           (div (@ (id "footer"))
                "powered by "
                (a (@ (href "http://wingolog.org/software/tekuti/"))
