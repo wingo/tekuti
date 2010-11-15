@@ -14,7 +14,8 @@ def all_posts():
     sql = ('select ID, post_author, post_date_gmt, post_content,'
            '       post_title, post_status, comment_status, post_name,'
            '       post_modified_gmt, post_content_filtered'
-           '  from wp_posts')
+           '  from wp_posts WHERE post_status="publish" AND'
+           '  post_type ="post" ORDER BY post_date DESC')
     cur.execute(sql)
     while True:
         row = cur.fetchone()
@@ -28,8 +29,11 @@ def all_posts():
 
 def post_categories(post):
     cur = cxn.cursor()
-    sql = ('select cat_name from wp_categories c, wp_post2cat p2c'
-           ' where p2c.post_id=%s and p2c.category_id=c.cat_ID')
+    sql = ('select name from wp_terms INNER JOIN wp_term_taxonomy ON'
+            ' wp_terms.term_id = wp_term_taxonomy.term_id INNER JOIN'
+            ' wp_term_relationships ON wp_term_relationships.term_taxonomy_id = '
+            ' wp_term_taxonomy.term_taxonomy_id WHERE'
+            ' wp_term_relationships.object_id=%s')
     cur.execute(sql, (post['id'],))
     return [row[0] for row in cur.fetchall()]
 
