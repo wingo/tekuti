@@ -89,7 +89,7 @@
   (let ((parts (string-split path #\/)))
     (if (eqv? (string-ref (car parts) 0) #\~)
         (let ((user (if (= (string-length (car parts)) 1)
-                        (cuserid)
+                        (vector-ref (getpwuid (getuid)) 0)
                         (substring (car parts) 1))))
           (string-join (cons (passwd:dir (getpwnam user)) (cdr parts)) "/"))
         path)))
