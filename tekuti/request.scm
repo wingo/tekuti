@@ -71,7 +71,7 @@
       '()
       (let ((content-type (request-content-type request)))
         (cond
-         ((equal? content-type '("application" "x-www-form-urlencoded"))
+         ((equal? content-type '("application/x-www-form-urlencoded"))
           (parse-www-form-urlencoded body))
          (else
           (error "bad content-type" content-type))))))
