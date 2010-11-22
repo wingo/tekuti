@@ -295,10 +295,7 @@
 (define (page-feed-atom request body index)
   (let ((last-modified (let ((posts (published-posts index 1)))
                          (and (pair? posts)
-                              (post-timestamp (car posts)))))
-        (server-name (or (request-host request)
-                         (uri-host (request-uri request))
-                         *host*)))
+                              (post-timestamp (car posts))))))
     (cond
      ((let ((since (request-if-modified-since request)))
         (and since (>= (date->timestamp since) last-modified)))
@@ -308,8 +305,8 @@
                #:last-modified (and=> last-modified timestamp->date)
                #:doctype #f
                #:content-type "application/atom+xml"
-               #:sxml (append (atom-header server-name last-modified)
+               #:sxml (append (atom-header last-modified)
                               (map
                                (lambda (post)
-                                 (atom-entry server-name post))
+                                 (atom-entry post))
                                (published-posts index 10))))))))

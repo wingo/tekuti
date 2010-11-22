@@ -69,5 +69,7 @@
 (define (main-loop)
   (run-server (lambda (r b i) (handler r b i))
               *server-impl*
-              *server-impl-args*
+              (if (list? *server-impl-args*)
+                  *server-impl-args*
+                  (*server-impl-args*))
               (read-index)))

@@ -27,17 +27,23 @@
 (define-module (tekuti config)
   #:use-module (tekuti util)
   #:use-module ((sxml ssax) #:select (define-parsed-entity!))
-  #:export (*host* *git-dir* *git* *debug* *admin-user* *admin-pass*
+  #:export (*public-host* *public-port* *public-path-base*
+            *private-host* *private-port* *private-path-base*
+            *git-dir* *git* *debug* *admin-user* *admin-pass*
             *css-file* *navbar-links* *navbar-infix*
             *title* *subtitle* *name*
-            *public-path-base* *private-path-base*
             *server-impl* *server-impl-args*))
 
-(define *host* "127.0.0.1")
+(define *public-host* "127.0.0.1")
+(define *public-port* 8080)
+(define *public-path-base* '())
+
+(define *private-host* "127.0.0.1")
+(define *private-port* 8080)
+(define *private-path-base* '())
+
 (define *git-dir* "~/blog.git")
 (define *git* "git")
-(define *public-path-base* '())
-(define *private-path-base* '())
 (define *css-file* "/base.css")
 (define *navbar-links* '())
 (define *navbar-infix* " ")
@@ -49,7 +55,8 @@
 (define *name* "Joe Schmo")
 
 (define *server-impl* 'http)
-(define *server-impl-args* '(#:host "127.0.0.1" #:port 8080))
+(define *server-impl-args*
+  (lambda () `(#:host ,*private-host* #:port ,*private-port*)))
 
 (define-parsed-entity! 'agrave 224)
 (define-parsed-entity! 'laquo 171)

@@ -55,13 +55,25 @@
    "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\" "
    "\"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\">\n"))
 
-(define (acons* tail . args) 
-  (let lp ((tail tail) (args args))
-    (if (null? args)
-        tail
-        (let ((k (car args)) (v (cadr args)))
-          (lp (if v (acons k v tail) tail)
-              (cddr args))))))
+(define-syntax build-headers
+  (syntax-rules ()
+    ((_ k v-exp rest ...)
+     (let ((v v-exp))
+       (let ((tail (build-headers rest ...)))
+         (if v
+             (acons 'k v tail)
+             tail))))
+    ((_ tail)
+     tail)))
+
+(define (ensure-public-uri x)
+  (cond
+   ((uri? x) x)
+   ((string? x)
+    (build-uri 'http #:host *public-host* #:port *public-port* #:path x))
+   ((list? x)
+    (ensure-public-uri (relurl x)))
+   (else (error "can't turn into a uri" x))))
 
 (define* (respond #:optional body #:key
                   redirect
@@ -72,14 +84,14 @@
                   (content-type-params '(("charset" . "utf-8")))
                   (content-type "text/html")
                   (extra-headers '())
-                  (sxml (templatize #:title title #:body body)))
+                  (sxml (and body (templatize #:title title #:body body))))
   (values (build-response
            #:code status
-           #:headers (acons*
-                      extra-headers
-                      'location redirect
-                      'last-modified last-modified
-                      'content-type (cons content-type content-type-params)))
+           #:headers (build-headers
+                      location (and=> redirect ensure-public-uri)
+                      last-modified last-modified
+                      content-type (cons content-type content-type-params)
+                      extra-headers))
           (lambda (port)
             (if sxml
                 (begin
@@ -347,11 +359,9 @@
                #:status 401
                #:extra-headers '((www-authenticate . "Basic realm=\"Tekuti\"")))))
 
-(define (atom-header server-name last-modified)
+(define (atom-header last-modified)
   (define (relurl . tail)
-    (string-append "http://" server-name "/"
-                   (encode-and-join-uri-path
-                    (append *public-path-base* tail))))
+    (unparse-uri (ensure-public-uri tail)))
   `(feed
      (@ (xmlns "http://www.w3.org/2005/Atom") (xml:base ,(relurl)))
      (title (@ (type "text")) ,*title*)
@@ -368,11 +378,9 @@
      (link (@ (rel "self") (type "application/atom+xml")
               (href ,(relurl "feed" "atom"))))))
 
-(define (atom-entry server-name post)
+(define (atom-entry post)
   (define (relurl . tail)
-    (string-append "http://" server-name "/"
-                   (encode-and-join-uri-path
-                    (append *public-path-base* tail))))
+    (unparse-uri (ensure-public-uri tail)))
   `(entry
     (author (name ,*name*) (uri ,(relurl)))
     (title (@ (type "text")) ,(post-title post))
