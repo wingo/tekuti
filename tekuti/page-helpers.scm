@@ -95,7 +95,7 @@
           (lambda (port)
             (if sxml
                 (begin
-                  (display doctype port)
+                  (if doctype (display doctype port))
                   (sxml->xml sxml port))))))
 
 (define (unparse-www-form-urlencoded alist)
