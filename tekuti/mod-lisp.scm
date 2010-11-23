@@ -53,7 +53,7 @@
   parse-http-method)
 
 (define-mod-lisp-header! 'url
-  "URL"
+  "url"
   parse-request-uri)
 
 (define-mod-lisp-header! 'server-ip-addr
@@ -119,7 +119,7 @@
       (build-request
        #:method (assq-ref meta 'method)
        #:uri (assq-ref meta 'url)
-       #:version (assq-ref meta 'url)
+       #:version (assq-ref meta 'server-protocol)
        #:headers headers
        #:meta meta
        #:port port))))
@@ -145,13 +145,13 @@
 (define (write-headers/mod-lisp headers port)
   (for-each
    (lambda (pair) 
-     (write-header (car pair) (cdr pair) port))
+     (write-header/mod-lisp (car pair) (cdr pair) port))
    headers))
 
 (define (write-response/mod-lisp r port)
   (write-response-line/mod-lisp (response-code r)
                                 (response-reason-phrase r) port)
-  (write-headers (response-headers r) port)
+  (write-headers/mod-lisp (response-headers r) port)
   (display "end" port) (newline port)
   (if (eq? port (response-port r))
       r
