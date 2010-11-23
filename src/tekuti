@@ -1,6 +1,6 @@
 #! /bin/bash
 # -*- scheme -*-
-exec guile $GUILE_FLAGS -e main "$0" -- "$@"
+exec guile $GUILE_FLAGS -e main "$0" "$@"
 !#
 ;; Tekuti
 ;; Copyright (C) 2008, 2010 Andy Wingo <wingo at pobox dot com>
