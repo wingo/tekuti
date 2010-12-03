@@ -30,6 +30,8 @@
   #:use-module (tekuti util)
   #:use-module (tekuti config)
   #:use-module (tekuti match-bind)
+  #:use-module (rnrs bytevectors)
+  #:use-module (rnrs io ports)
   #:use-module ((srfi srfi-1) #:select (filter-map partition
                                         delete-duplicates))
   #:use-module (srfi srfi-34)
@@ -84,10 +86,15 @@
         args))
   (let* ((real-args (trc (redirect-input (prepend-env args))))
          (pipe (apply open-pipe* OPEN_READ real-args))
-         (output (read-delimited "" pipe))
+         (output (begin
+                   (set-port-encoding! pipe "ISO-8859-1")
+                   (let ((bv (get-bytevector-all pipe)))
+                     (if (eof-object? bv)
+                         ""
+                         (utf8->string bv)))))
          (ret (close-pipe pipe)))
     (case (status:exit-val ret)
-      ((0) (if (eof-object? output) "" output))
+      ((0) output)
       (else (trc 'git-error output ret real-args)
             (raise (condition (&git-condition
                                (argv real-args)
