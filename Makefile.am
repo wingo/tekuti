@@ -3,6 +3,7 @@ moddir=$(prefix)/share/guile/site
 SOURCES =					\
 	tekuti/base64.scm			\
 	tekuti/boot.scm				\
+	tekuti/cache.scm			\
 	tekuti/comment.scm			\
 	tekuti/config.scm			\
 	tekuti/filters.scm			\
