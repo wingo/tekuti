@@ -26,6 +26,7 @@
 
 (define-module (tekuti web)
   #:use-module (web server)
+  #:use-module (tekuti cache)
   #:use-module (tekuti request)
   #:use-module (tekuti index)
   #:use-module (tekuti page)
@@ -57,19 +58,29 @@
    ((GET debug) page-debug)
    (else page-not-found)))
 
-(define (handler request body index)
-  (let ((index (maybe-reindex index)))
-    (call-with-values (lambda ()
-                        ((choose-handler request) request body (cdr index)))
-      (lambda (response body)
-        (values response body index)))))
+(define handler
+  (lambda (request body index cache)
+    (let ((index (maybe-reindex index)))
+      (call-with-values
+          (lambda ()
+            (if (cache-hit? cache (car index) request)
+                (cache-ref cache (car index) request)
+                (call-with-values
+                    (lambda ()
+                      ((choose-handler request) request body (cdr index)))
+                  (lambda (response body)
+                    (sanitize-response request response body)))))
+        (lambda (response body)
+          (values response body index
+                  (cache-set cache (car index) request response body)))))))
 
 ;; The seemingly useless lambda is to allow for `handler' to be
 ;; redefined at runtime.
 (define (main-loop)
-  (run-server (lambda (r b i) (handler r b i))
+  (run-server (lambda (r b i c) (handler r b i c))
               *server-impl*
               (if (list? *server-impl-args*)
                   *server-impl-args*
                   (*server-impl-args*))
-              (read-index)))
+              (read-index)
+              #f))
