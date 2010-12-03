@@ -27,6 +27,8 @@
 (define-module (tekuti mod-lisp)
   #:use-module (ice-9 rdelim)
   #:use-module (system repl error-handling)
+  #:use-module (srfi srfi-9)
+  #:use-module (ice-9 poll)
   #:use-module (rnrs bytevectors)
   #:use-module (web http)
   #:use-module (web request)
@@ -167,30 +169,84 @@
     (bind sock family addr port)
     sock))
 
+(define-record-type <mod-lisp-server>
+  (make-mod-lisp-server socket poll-idx poll-set)
+  mod-lisp-server?
+  (socket mod-lisp-socket)
+  (poll-idx mod-lisp-poll-idx set-mod-lisp-poll-idx!)
+  (poll-set mod-lisp-poll-set))
+
+(define *error-events* (logior POLLHUP POLLERR))
+(define *read-events* POLLIN)
+(define *events* (logior *error-events* *read-events*))
+
 ;; -> server
 (define* (mod-lisp-open #:key
-                        (host #f)
-                        (family AF_INET)
-                        (addr (if host
-                                  (inet-pton family host)
-                                  INADDR_LOOPBACK))
-                        (port 8080)
-                        (socket (make-default-socket family addr port)))
-  (listen socket 5)
-  socket)
+                    (host #f)
+                    (family AF_INET)
+                    (addr (if host
+                              (inet-pton family host)
+                              INADDR_LOOPBACK))
+                    (port 8080)
+                    (socket (make-default-socket family addr port)))
+  (listen socket 128)
+  (sigaction SIGPIPE SIG_IGN)
+  (let ((poll-set (make-empty-poll-set)))
+    (poll-set-add! poll-set socket *events*)
+    (make-mod-lisp-server socket 0 poll-set)))
 
-;; For mod-lisp, we don't do keep-alive.
-(define (keep-alive? response)
-  #f)
+;; -> (client request body | #f #f #f)
+(define (mod-lisp-read server)
+  (let* ((poll-set (mod-lisp-poll-set server)))
+    (let lp ((idx (mod-lisp-poll-idx server)))
+      (let ((revents (poll-set-revents poll-set idx)))
+        (cond
+         ((zero? idx)
+          ;; The server socket, and the end of our downward loop.
+          (cond
+           ((zero? revents)
+            ;; No client ready, and no error; poll and loop.
+            (poll poll-set)
+            (lp (1- (poll-set-nfds poll-set))))
+           ((not (zero? (logand revents *error-events*)))
+            ;; An error.
+            (throw 'interrupt))
+           (else
+            ;; A new client. Add to set, poll, and loop.
+            ;;
+            ;; FIXME: preserve meta-info.
+            (let ((client (accept (poll-set-port poll-set idx))))
+              ;; Set line buffering while reading the request.
+              (setvbuf (car client) _IOLBF)
+              ;; From "HOP, A Fast Server for the Diffuse Web", Serrano.
+              (setsockopt (car client) SOL_SOCKET SO_SNDBUF (* 12 1024))
+              (poll-set-add! poll-set (car client) *events*)
+              (poll poll-set)
+              (lp (1- (poll-set-nfds poll-set)))))))
+         ((zero? revents)
+          ;; Nothing on this port.
+          (lp (1- idx)))
+         ;; Otherwise, a client socket with some activity on
+         ;; it. Remove it from the poll set.
+         (else
+          (let ((port (poll-set-remove! poll-set idx)))
+            (cond
+             ((eof-object? (peek-char port))
+              ;; EOF.
+              (close-port port)
+              (lp (1- idx)))
+             (else
+              ;; Otherwise, try to read a request from this port.
+              ;; Record the next index.
+              (set-mod-lisp-poll-idx! server (1- idx))
+              (let ((req (read-request/mod-lisp port)))
+                ;; Block buffering for reading body and writing response.
+                (setvbuf port _IOFBF)
+                (values port
+                        req
+                        (read-request-body/latin-1 req))))))))))))
 
-;; -> (keep-alive client request body | keep-alive #f #f #f)
-(define (mod-lisp-read server keep-alive)
-  (let* ((client (accept server))
-         (req (read-request/mod-lisp (car client)))
-         (body-str (read-request-body/latin-1 req)))
-    (values keep-alive (car client) req body-str)))
-
-;; -> (#f | client)
+;; -> unspecified values
 (define (mod-lisp-write server client response body)
   (let ((response (write-response/mod-lisp response client)))
     (cond
@@ -201,12 +257,16 @@
       (write-response-body/bytevector response body))
      (else
       (error "Expected a string or bytevector for body" body)))
-    (close-port (response-port response))
-    #f))
+    (close-port (response-port response))))
 
 ;; -> unspecified values
 (define (mod-lisp-close server)
-  (close-port server))
+  (let ((poll-set (mod-lisp-poll-set server)))
+    (let lp ((n (poll-set-nfds poll-set)))
+      (if (positive? n)
+          (begin
+            (close-port (poll-set-remove! poll-set (1- n)))
+            (lp (1- n)))))))
 
 (define-server-impl mod-lisp
   mod-lisp-open
