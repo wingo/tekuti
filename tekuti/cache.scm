@@ -41,7 +41,8 @@
   (apply values (assoc-ref (cdr cache) (request-uri request))))
 
 (define (cache-set cache master request . args)
-  (append (if (and cache (< (length cache) 20))
-              cache
-              (list master))
-          (acons (request-uri request) args '())))
+  (cons* master
+         (cons (request-uri request) args)
+         (if (and cache (equal? (car cache) master))
+             (list-head (cdr cache) 9)
+             '())))
