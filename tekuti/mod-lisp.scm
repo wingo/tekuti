@@ -116,6 +116,9 @@
                     (lp (acons k v headers) meta)))))))))
 
 (define (read-request/mod-lisp port)
+  ;; See the note in (web request) regarding chars, bytes, and strings
+  ;; for more notes on charsets.
+  (set-port-encoding! port "ISO-8859-1")
   (call-with-values (lambda () (read-headers/mod-lisp port))
     (lambda (headers meta)
       (build-request
