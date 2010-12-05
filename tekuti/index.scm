@@ -30,11 +30,13 @@
   #:use-module (tekuti git)
   #:use-module (tekuti post)
   #:use-module (tekuti tags)
-  #:export (maybe-reindex read-index))
+  #:use-module (tekuti cache)
+  #:export (maybe-reindex read-index update-index))
 
 (define index-specs
   `((posts ,reindex-posts ,write ,read)
-    (tags ,reindex-tags ,write-hash ,read-hash)))
+    (tags ,reindex-tags ,write-hash ,read-hash)
+    (cache ,(lambda _ (make-empty-cache)) ,(lambda (x) #f) ,(lambda () '()))))
 
 (define (reindex oldindex master)
   (with-time-debugging
@@ -60,11 +62,14 @@
 (define (write-index index oldref)
   (let ((new (git-commit-tree
               (git-mktree
-               (pk (map (lambda (pair)
-                          (list (car pair)
-                                (index->blob (car pair) (cdr pair))
-                                'blob))
-                        index)))
+               (let lp ((index index))
+                 (cond
+                  ((null? index) '())
+                  ((eq? (caar index) 'index) (lp (cdr index)))
+                  (else (cons (list (caar index)
+                                    (index->blob (caar index) (cdar index))
+                                    'blob)
+                              (lp (cdr index)))))))
               oldref "reindex\n"
               (commit-utc-timestamp (assq-ref index 'master)))))
     (or (false-if-git-error
@@ -75,26 +80,31 @@
 (define (read-index)
   (let* ((ref (false-if-git-error (git-rev-parse "refs/heads/index")))
          (dents (if ref (git-ls-tree ref #f) '())))
-    (cons ref
-          (and (and-map (lambda (spec)
-                          (assoc (symbol->string (car spec)) dents))
-                        index-specs)
-               (map (lambda (dent)
-                      (cons (string->symbol (car dent))
-                            (blob->index (car dent) (cadr dent))))
-                    dents)))))
+    (acons 'index ref
+           (and (and-map (lambda (spec)
+                           (assoc (symbol->string (car spec)) dents))
+                         index-specs)
+                (map (lambda (dent)
+                       (cons (string->symbol (car dent))
+                             (blob->index (car dent) (cadr dent))))
+                     dents)))))
 
 (define (maybe-reindex old-index)
-  (let ((master (git-rev-parse "refs/heads/master"))
-        (old-index-sha1 (and=> old-index car))
-        (old-index-data (if old-index (cdr old-index) '())))
-    (if (equal? (assq-ref old-index-data 'master) master)
+  (let ((master (git-rev-parse "refs/heads/master")))
+    (if (equal? (assq-ref old-index 'master) master)
         old-index
         (catch #t
                (lambda ()
-                 (let ((new-index (reindex old-index-data master)))
-                   (cons (write-index new-index old-index-sha1)
-                         new-index)))
+                 (let ((new-index (reindex old-index master)))
+                   (acons
+                    'index (write-index new-index (assq-ref old-index 'index))
+                    new-index)))
                (lambda (key . args)
                  (warn "error while reindexing:" key args)
                  old-index)))))
+
+(define (update-index index key update)
+  (cond
+   ((null? index) (acons key (update '()) '()))
+   ((eq? (caar index) key) (acons key (update index) (cdr index)))
+   (else (cons (car index) (update-index (cdr index) key update)))))

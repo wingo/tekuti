@@ -20,29 +20,58 @@
 
 ;;; Commentary:
 ;;
-;; A cache for responses.
+;; A simple response cache.  The model is that all request-response
+;; pairs that the cache sees are fresh and valid.  The application can
+;; invalidate the cache simply by creating a new empty cache.
 ;;
 ;;; Code:
 
 (define-module (tekuti cache)
+  #:use-module (tekuti util)
   #:use-module (web request)
-  #:export (cache-hit?
-            cache-ref
-            cache-set))
+  #:use-module (web response)
+  #:export (make-empty-cache
+            cached-response-and-body
+            update-cache))
             
-(define (cache-hit? cache master request)
+(define (cacheable-request? request)
+  (and (memq (request-method request) '(GET HEAD))
+       (not (request-authorization request))))
+
+(define (cacheable-response? response)
+  (and (not (memq 'no-cache (response-pragma response)))
+       (not (member '(no-cache . #t) (response-cache-control response)))
+       (memq (response-code response) '(200 301 304 404 410))
+       (null? (response-vary response))))
+
+(define (make-empty-cache)
+  '())
+
+(define (make-entry matcher response body)
+  (cons matcher (cons response body)))
+(define (entry-matcher entry)
+  (car entry))
+(define (entry-response-body-pair entry)
+  (cdr entry))
+
+(define (cached-response-and-body cache request)
   (and cache
-       (equal? (car cache) master)
-       (eq? (request-method request) 'GET)
-       (assoc (request-uri request) (cdr cache))
-       #t))
+       (cacheable-request? request)
+       (or-map (lambda (entry)
+                 (and ((entry-matcher entry) request)
+                      (entry-response-body-pair entry)))
+               cache)))
 
-(define (cache-ref cache master request)
-  (apply values (assoc-ref (cdr cache) (request-uri request))))
+(define (make-matcher request response)
+  (let ((uri (request-uri request))
+        (method (request-method request)))
+    (lambda (request)
+      (and (equal? (request-uri request) uri)
+           (eq? (request-method request) method)))))
 
-(define (cache-set cache master request . args)
-  (cons* master
-         (cons (request-uri request) args)
-         (if (and cache (equal? (car cache) master))
-             (list-head (cdr cache) 9)
-             '())))
+(define (update-cache cache request response body)
+  (if (and (cacheable-request? request)
+           (cacheable-response? response))
+      (cons (make-entry (make-matcher request response) response body)
+            (take-max (or cache '()) 9))
+      (or cache '())))

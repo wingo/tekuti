@@ -58,29 +58,38 @@
    ((GET debug) page-debug)
    (else page-not-found)))
 
-(define handler
-  (lambda (request body index cache)
-    (let ((index (maybe-reindex index)))
-      (call-with-values
-          (lambda ()
-            (if (cache-hit? cache (car index) request)
-                (cache-ref cache (car index) request)
-                (call-with-values
-                    (lambda ()
-                      ((choose-handler request) request body (cdr index)))
-                  (lambda (response body)
-                    (sanitize-response request response body)))))
+(define (cache-ref index request)
+  (cached-response-and-body (assq-ref index 'cache) request))
+
+(define (cache-set index request response body)
+  (update-index
+   (maybe-reindex index)
+   'cache
+   (lambda (index)
+     (update-cache (assq-ref index 'cache) request response body))))
+
+(define (handler request body index)
+  (let ((index (maybe-reindex index)))
+    (cond
+     ((cache-ref index request)
+      => (lambda (cached)
+           (values (car cached) (cdr cached) index)))
+     (else
+      (call-with-values (lambda ()
+                          ((choose-handler request) request body index))
         (lambda (response body)
-          (values response body index
-                  (cache-set cache (car index) request response body)))))))
+          (call-with-values (lambda ()
+                              (sanitize-response request response body))
+            (lambda (response body)
+              (let ((index (cache-set index request response body)))
+                (values response body index))))))))))
 
 ;; The seemingly useless lambda is to allow for `handler' to be
 ;; redefined at runtime.
 (define (main-loop)
-  (run-server (lambda (r b i c) (handler r b i c))
+  (run-server (lambda (r b i) (handler r b i))
               *server-impl*
               (if (list? *server-impl-args*)
                   *server-impl-args*
                   (*server-impl-args*))
-              (read-index)
-              #f))
+              (read-index)))
