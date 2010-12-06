@@ -242,12 +242,17 @@
               ;; Otherwise, try to read a request from this port.
               ;; Record the next index.
               (set-mod-lisp-poll-idx! server (1- idx))
-              (let ((req (read-request/mod-lisp port)))
-                ;; Block buffering for reading body and writing response.
-                (setvbuf port _IOFBF)
-                (values port
-                        req
-                        (read-request-body/latin-1 req))))))))))))
+              (with-throw-handler
+               #t
+               (lambda ()
+                 (let ((req (read-request/mod-lisp port)))
+                   ;; Block buffering for reading body and writing response.
+                   (setvbuf port _IOFBF)
+                   (values port
+                           req
+                           (read-request-body/latin-1 req))))
+               (lambda (k . args)
+                 (false-if-exception (close-port port)))))))))))))
 
 ;; -> unspecified values
 (define (mod-lisp-write server client response body)
