@@ -171,7 +171,8 @@
   (respond `(,(main-sidebar request index)
              ,@(map (lambda (post)
                       (show-post post #f))
-                    (published-posts index 10)))))
+                    (published-posts index 10)))
+           #:etag (assq-ref index 'master)))
 
 (define (page-show-post request body index year month day post)
   (cond
@@ -180,7 +181,8 @@
     => (lambda (post)
          (respond `(,(post-sidebar post index)
                     ,(show-post post #t))
-                  #:title (string-append (post-title post) " -- " *title*))))
+                  #:title (string-append (post-title post) " -- " *title*)
+                  #:etag (assq-ref index 'master))))
    (else
     (page-not-found request body index))))
 
@@ -233,7 +235,8 @@
                  (cond
                   ((or (null? posts) (too-early? (car posts)))
                    (respond (reverse out)
-                            #:title (string-append "archives -- " *title*)))
+                            #:title (string-append "archives -- " *title*)
+                            #:etag (assq-ref index 'master)))
                   ((new-header (car posts))
                    => (lambda (sxml)
                         (lp (cdr posts) (make-date-header (car posts))
@@ -256,6 +259,7 @@
   (respond `((div (@ (id "tag-cloud"))
                   (h2 "all tags")
                   ,@(tag-cloud (top-tags index 200))))
+           #:etag (assq-ref index 'master)
            #:title (string-append "all tags -- " *title*)))
 
 (define (page-show-tag request body index tag)
@@ -268,6 +272,7 @@
                    ,@(map (lambda (post) `(p ,(post-link post)))
                           posts)
                    ,(related-tag-cloud tag index)) 
+                 #:etag (assq-ref index 'master)
                  #:title (string-append "posts tagged \"" tag "\""))
         (respond `((h2 "Unknown tag " ,tag)
                    (p "No posts were found tagged as \"" ,tag "\"."))
@@ -305,6 +310,7 @@
                #:last-modified (and=> last-modified timestamp->date)
                #:doctype #f
                #:content-type "application/atom+xml"
+               #:etag (assq-ref index 'master)
                #:sxml (append (atom-header last-modified)
                               (map
                                (lambda (post)

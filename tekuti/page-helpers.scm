@@ -80,6 +80,7 @@
                   (status (if redirect 302 200))
                   (title *title*)
                   last-modified
+                  etag
                   (doctype xhtml-doctype)
                   (content-type-params '(("charset" . "utf-8")))
                   (content-type "text/html")
@@ -91,6 +92,8 @@
                       location (and=> redirect ensure-public-uri)
                       last-modified last-modified
                       content-type (cons content-type content-type-params)
+                      date (current-date)
+                      etag (if (string? etag) (cons etag #t) etag)
                       extra-headers))
           (lambda (port)
             (if sxml
