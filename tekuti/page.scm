@@ -304,7 +304,9 @@
     (cond
      ((let ((since (request-if-modified-since request)))
         (and since (>= (date->timestamp since) last-modified)))
-      (respond #f #:status 304))
+      (respond #f #:status 304
+               #:last-modified (timestamp->date last-modified)
+               #:etag (assq-ref index 'master)))
      (else
       (respond #f
                #:last-modified (and=> last-modified timestamp->date)
