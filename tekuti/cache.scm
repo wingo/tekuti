@@ -75,7 +75,8 @@
               (let ((last-modified (response-last-modified response))
                     (since (request-if-modified-since request)))
                 (if (and last-modified since)
-                    (<= (date->time-utc last-modified) (date->time-utc since))
+                    (time<=? (date->time-utc last-modified)
+                             (date->time-utc since))
                     #t))
               (let ((etag (response-etag response))
                     (match (request-if-none-match request)))
@@ -94,8 +95,8 @@
                     (and (or since match)
                          (or (not since)
                              (and last-modified
-                                  (<= (date->time-utc last-modified)
-                                      (date->time-utc since))))
+                                  (time<=? (date->time-utc last-modified)
+                                           (date->time-utc since))))
                          (or (not match)
                              (and etag (list? match) (member etag match)))
                          (cons (build-response
