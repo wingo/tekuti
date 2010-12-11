@@ -31,6 +31,8 @@
   #:use-module (web uri)
   #:use-module (web request)
   #:use-module (rnrs bytevectors)
+  #:use-module (rnrs io ports)
+  #:use-module (ice-9 rdelim)
   #:use-module (tekuti config)
   #:use-module (tekuti base64)
   #:export (request-relative-path
@@ -40,14 +42,14 @@
             request-authenticated?
             request-form-data))
 
-(define (parse-www-form-urlencoded str)
+(define* (parse-www-form-urlencoded str #:optional (charset "utf-8"))
   (map
    (lambda (piece)
      (let ((equals (string-index piece #\=)))
        (if equals
-           (cons (uri-decode (substring piece 0 equals))
-                 (uri-decode (substring piece (1+ equals))))
-           (cons (uri-decode piece) ""))))
+           (cons (uri-decode (substring piece 0 equals) #:charset charset)
+                 (uri-decode (substring piece (1+ equals)) #:charset charset))
+           (cons (uri-decode piece #:charset charset) ""))))
    (string-split str #\&)))
 
 (define (request-relative-path r)
@@ -66,15 +68,30 @@
      ((and q (assoc param (parse-www-form-urlencoded q))) => cdr)
      (else default))))
 
+(define (decode-string bv charset)
+  (if (string-ci=? charset "utf-8")
+      (utf8->string bv)
+      (let ((p (open-bytevector-input-port bv)))
+        (set-port-encoding! p charset)
+        (read-delimited "" p))))
+
 (define (request-form-data request body)
-  (if (or (not body) (string-null? body))
-      '()
-      (let ((content-type (request-content-type request)))
-        (cond
-         ((equal? content-type '("application/x-www-form-urlencoded"))
-          (parse-www-form-urlencoded body))
-         (else
-          (error "bad content-type" content-type))))))
+  (if (bytevector? body)
+      ;; Since valid application/x-www-form-urlencoded content only has
+      ;; ascii characters, treat the incoming data as ascii (well,
+      ;; latin-1), then use the charset when percent-decoding the
+      ;; content.
+      (request-form-data request (decode-string body "iso-8859-1"))
+      (if (or (not body) (string-null? body))
+          '()
+          (let* ((content-type (request-content-type request))
+                 (charset (or (assoc-ref (cdr content-type) "charset")
+                              "utf-8")))
+            (cond
+             ((equal? (car content-type) "application/x-www-form-urlencoded")
+              (parse-www-form-urlencoded body charset))
+             (else
+              (error "bad content-type" content-type)))))))
 
 ;; danger here, regarding the optional alternate clauses...
 (define (request-authenticated? request)
