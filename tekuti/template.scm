@@ -27,6 +27,7 @@
 (define-module (tekuti template)
   #:use-module (web uri)
   #:use-module (tekuti config)
+  #:use-module (tekuti page-helpers)
   #:export (templatize))
 
 (define* (templatize #:key
@@ -56,7 +57,11 @@
           (link (@ (rel "stylesheet")
                    (type "text/css")
                    (media "screen")
-                   (href ,*css-file*))))
+                   (href ,*css-file*)))
+          (link (@ (rel "alternate")
+                   (type "application/rss+xml")
+                   (title ,*title*)
+                   (href ,(relurl `("feed" "atom"))))))
     (body
      (div (@ (id "rap"))
           (h1 (@ (id "header"))
