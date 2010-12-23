@@ -82,7 +82,7 @@ def html_media_object(service, media_id):
 
 def analyze_media(content):
     p_youtube = re.compile(r"\[youtube=http://www\.youtube\.com/watch\?v=(.+)\]")
-    p_googlevideo = re.compile(r"\[googlevideo=http://video\.google\.es/videoplay\?docid=(.+)\]")
+    p_googlevideo = re.compile(r"\[googlevideo=http://video\.google\.com/videoplay\?docid=(.+)\]")
     lines = content.split("\n")
     new_lines = []
     for line in lines:
