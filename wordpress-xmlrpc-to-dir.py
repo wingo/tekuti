@@ -71,8 +71,8 @@ class MyHTMLParser(HTMLParser):
             fp.close()
 
 def html_media_object(service, url):
-    services = {"youtube" : '<object width="640" height="390"><param name="movie" value="%url%?fs=1&amp;hl=en_US"></param><param name="allowFullScreen" value="true"></param><param name="allowscriptaccess" value="always"></param><embed src="%url%?fs=1&amp;hl=en_US" type="application/x-shockwave-flash" allowscriptaccess="always" allowfullscreen="true" width="640" height="390"></embed></object>',
-                "googlevideo": '<object type="application/x-shockwave-flash" data="%url%" height="330" width="400"><param name="allowScriptAccess" value="never"><param name="movie" value="%url%"><param name="quality" value="best"><param name="bgcolor" value="#ffffff"><param name="scale" value="noScale"><param name="wmode" value="opaque"></object>'}
+    services = {"youtube" : '<object width="640" height="390"><param name="movie" value="%url%?fs=1&amp;hl=en_US"/><param name="allowFullScreen" value="true"></param><param name="allowscriptaccess" value="always"/><embed src="%url%?fs=1&amp;hl=en_US" type="application/x-shockwave-flash" allowscriptaccess="always" allowfullscreen="true" width="640" height="390"/>></object>',
+                "googlevideo": '<object type="application/x-shockwave-flash" data="%url%" height="330" width="400"><param name="allowScriptAccess" value="never"/><param name="movie" value="%url%"/><param name="quality" value="best"/><param name="bgcolor" value="#ffffff"/><param name="scale" value="noScale"/><param name="wmode" value="opaque"/></object>'}
     html_center_start = '<p><span style="text-align: center; display: block;">'
     html_center_end = '</span></p>'
     html_service = services[service]
