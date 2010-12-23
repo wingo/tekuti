@@ -70,18 +70,19 @@ class MyHTMLParser(HTMLParser):
             curl.close()
             fp.close()
 
-def html_media_object(service, url):
-    services = {"youtube" : '<object width="640" height="390"><param name="movie" value="%url%?fs=1&amp;hl=en_US"/><param name="allowFullScreen" value="true"></param><param name="allowscriptaccess" value="always"/><embed src="%url%?fs=1&amp;hl=en_US" type="application/x-shockwave-flash" allowscriptaccess="always" allowfullscreen="true" width="640" height="390"/></object>',
-                "googlevideo": '<object type="application/x-shockwave-flash" data="%url%" height="330" width="400"><param name="allowScriptAccess" value="never"/><param name="movie" value="%url%"/><param name="quality" value="best"/><param name="bgcolor" value="#ffffff"/><param name="scale" value="noScale"/><param name="wmode" value="opaque"/></object>'}
+def html_media_object(service, media_id):
+    services = {"youtube" : '<object width="480" height="385"><param name="movie" value="http://www.youtube.com/v/%media_id%fs=1&amp;hl=en_US"></param><param name="allowFullScreen" value="true"></param><param name="allowscriptaccess" value="always"></param><embed src="http://www.youtube.com/v/%media_id%?fs=1&amp;hl=en_US" type="application/x-shockwave-flash" allowscriptaccess="always" allowfullscreen="true" width="480" height="385"></embed></object>',
+                "googlevideo": '<object type="application/x-shockwave-flash" data="http://video.google.com/googleplayer.swf?docid=%media_id%" height="330" width="400"><param name="allowScriptAccess" value="never"/><param name="movie" value="http://video.google.com/googleplayer.swf?docid=%media_id%"/><param name="quality" value="best"/><param name="bgcolor" value="#ffffff"/><param name="scale" value="noScale"/><param name="wmode" value="opaque"/></object>'}
+
     html_center_start = '<p><span style="text-align: center; display: block;">'
     html_center_end = '</span></p>'
     html_service = services[service]
-    html_service = html_service.replace("%url%", url)
+    html_service = html_service.replace("%media_id%", media_id)
     return html_center_start + html_service + html_center_end
 
 def analyze_media(content):
-    p_youtube = re.compile(r"\[youtube=(.+)\]")
-    p_googlevideo = re.compile(r"\[googlevideo=(.+)\]")
+    p_youtube = re.compile(r"\[youtube=http://www\.youtube\.com/watch\?v=(.+)\]")
+    p_googlevideo = re.compile(r"\[googlevideo=http://video\.google\.es/videoplay\?docid=(.+)\]")
     lines = content.split("\n")
     new_lines = []
     for line in lines:
