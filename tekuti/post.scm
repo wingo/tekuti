@@ -113,7 +113,7 @@
                ((wordpress) (wordpress->sxml raw))
                (else `(pre ,raw))))
            (lambda args
-             `(pre "Formatting error\n" ,raw)))))
+             `(pre ,(bad-user-submitted-xhtml? raw))))))
 
 (define (post-readable-date post)
   (let ((date (time-utc->date

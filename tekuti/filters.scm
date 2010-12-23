@@ -146,18 +146,19 @@
            (pre-post-order (wordpress->sxml x) *valid-xhtml-rules*)
            #f)
          (lambda (key . args)
-           `(div (p "Invalid XHTML")
+           `(div (p (b "Invalid XHTML"))
                  ,(case key
                     ((parser-error)
                      `(div
-                       (p "The comment filter requires valid XHTML, although "
-                          "it will translate single newlines to <br/> elements, "
+                       (p "Valid XHTML is required, although it will "
+                          "translate single newlines to <br/> elements, "
                           "and multiple newlines to paragraphs.")
                        (p "Usually if you get here it's because you put in a "
-                          "malformed XHTML tag. Another way to get here is if "
+                          "malformed XHTML tag.")
+                       (p "Another way to get here is if "
                           "you have an unescaped <, >, or & character. Replace "
                           "them with &lt;, &gt;, or &amp;, respectively.")
-                       (p "Here is the internal error:")
+                       (p (b "Here is the internal error:"))
                        (pre ,(with-output-to-string
                                (lambda () (write args))))))
                     ((bad-tag)
