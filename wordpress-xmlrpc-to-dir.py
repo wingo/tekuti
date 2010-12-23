@@ -2,6 +2,7 @@
 
 import os
 import pycurl
+import re
 import string
 import sys
 import tempfile
@@ -68,6 +69,33 @@ class MyHTMLParser(HTMLParser):
             curl.perform()
             curl.close()
             fp.close()
+
+def html_media_object(service, url):
+    services = {"youtube" : '<object width="640" height="390"><param name="movie" value="%url%?fs=1&amp;hl=en_US"></param><param name="allowFullScreen" value="true"></param><param name="allowscriptaccess" value="always"></param><embed src="%url%?fs=1&amp;hl=en_US" type="application/x-shockwave-flash" allowscriptaccess="always" allowfullscreen="true" width="640" height="390"></embed></object>',
+                "googlevideo": '<object type="application/x-shockwave-flash" data="%url%" height="330" width="400"><param name="allowScriptAccess" value="never"><param name="movie" value="%url%"><param name="quality" value="best"><param name="bgcolor" value="#ffffff"><param name="scale" value="noScale"><param name="wmode" value="opaque"></object>'}
+    html_center_start = '<p><span style="text-align: center; display: block;">'
+    html_center_end = '</span></p>'
+    html_service = services[service]
+    html_service = html_service.replace("%url%", url)
+    return html_center_start + html_service + html_center_end
+
+def analyze_media(content):
+    p_youtube = re.compile(r"\[youtube=(.+)\]")
+    p_googlevideo = re.compile(r"\[googlevideo=(.+)\]")
+    lines = content.split("\n")
+    new_lines = []
+    for line in lines:
+        m_youtube = p_youtube.search(line)
+        m_googlevideo = p_googlevideo.search(line)
+        if m_youtube:
+            html_object = html_media_object("youtube", m_youtube.group(1))
+            new_lines.append(html_object)
+        elif m_googlevideo:
+            html_object = html_media_object("googlevideo", m_googlevideo.group(1))
+            new_lines.append(html_object)
+        else:
+            new_lines.append(line)
+    return "\n".join(new_lines)
 
 def make_dir(path):
     os.mkdir(path)
@@ -136,6 +164,7 @@ def write_post(post, categories, comments, images_url, new_images_url):
     key = make_post_key(post)
     d = make_dir(key)
     content = string.replace(post["description"], images_url, new_images_url)
+    content = analyze_media(content)
     write_file(d + "content", content)
     write_file(d + "metadata", make_metadata())
     if comments:
