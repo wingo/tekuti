@@ -56,7 +56,7 @@ class MyHTMLParser(HTMLParser):
                 pass
             fp = open(filename, "wb")
             curl = pycurl.Curl()
-            curl.setopt(pycurl.URL, url)
+            curl.setopt(pycurl.URL, str(url))
             curl.setopt(pycurl.FOLLOWLOCATION, 1)
             curl.setopt(pycurl.MAXREDIRS, 5)
             curl.setopt(pycurl.CONNECTTIMEOUT, 30)
