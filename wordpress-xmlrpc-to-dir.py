@@ -12,6 +12,8 @@ import xmlrpclib
 
 from HTMLParser import HTMLParser
 
+MAX_POST_NO = 10000
+
 class WordPress:
 
     def __init__(self, url, username, password):
@@ -20,7 +22,6 @@ class WordPress:
         self.__proxy = xmlrpclib.ServerProxy(url)
 
     def all_posts(self):
-        MAX_POST_NO = 10000
         return self.__proxy.metaWeblog.getRecentPosts("",
                                                       self.__username,
                                                       self.__password,
@@ -30,7 +31,8 @@ class WordPress:
         return self.__proxy.wp.getComments("",
                                            self.__username,
                                            self.__password,
-                                           {"post_id" : post["postid"]})
+                                           {"post_id" : post["postid"],
+                                            "number": MAX_POST_NO})
 
 class MyHTMLParser(HTMLParser):
 
