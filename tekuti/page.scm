@@ -55,6 +55,7 @@
             page-debug 
             page-search 
             page-feed-atom
+            page-feed-atom-tag
             page-debug
             page-not-found))
 
@@ -314,10 +315,10 @@
                 ,(request-relative-path-str (pk 'not-found request))))
            #:status 404))
 
-(define (page-feed-atom request body index)
-  (let ((last-modified (let ((posts (published-posts index 1)))
-                         (and (pair? posts)
-                              (post-timestamp (car posts))))))
+
+(define (atom-feed-from-posts request body index posts)
+  (let ((last-modified (and (pair? posts)
+                            (post-timestamp (car posts)))))
     (cond
      ((let ((since (request-if-modified-since request)))
         (and since (>= (date->timestamp since) last-modified)))
@@ -334,4 +335,16 @@
                               (map
                                (lambda (post)
                                  (atom-entry post))
-                               (published-posts index 10))))))))
+                               posts)))))))
+
+
+(define (page-feed-atom request body index)
+  (atom-feed-from-posts request body index (published-posts index 10)))
+
+(define (page-feed-atom-tag request body index tag)
+  (let* ((tags (assq-ref index 'tags))
+         (posts (filter-mapn (lambda (key)
+                               (post-from-key (assq-ref index 'master) key))
+                             (hash-ref tags tag '())
+                             10)))
+  (atom-feed-from-posts request body index posts)))
