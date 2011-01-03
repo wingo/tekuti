@@ -183,7 +183,19 @@ def main(args):
     d_images = tempfile.mkdtemp(prefix="wp2img")
     print "creating directories %s and %s" % (d_posts, d_images)
 
-    _, url, images_url, new_images_url, user, passwd = args
+    try:
+        _, url, images_url, new_images_url, user, passwd = args
+    except ValueError:
+	print
+        print "usage: wordpress-xmlrpc-to-dir.py url images_url new_images_url user password"
+	print
+	print "   url             Wordpress XMLRPC URL"
+	print "   images_url      Current Wordpress images URL (without http://)"
+	print "   new_images_url  New tekuti images URL (without http://)"
+	print "   user            Wordpress user"
+	print "   password        Wordpress user password"
+	print
+        sys.exit(1)
 
     wp = WordPress(url, user, passwd)
     posts = wp.all_posts()
