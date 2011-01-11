@@ -47,9 +47,9 @@
    (lambda (piece)
      (let ((equals (string-index piece #\=)))
        (if equals
-           (cons (uri-decode (substring piece 0 equals) #:charset charset)
-                 (uri-decode (substring piece (1+ equals)) #:charset charset))
-           (cons (uri-decode piece #:charset charset) ""))))
+           (cons (uri-decode (substring piece 0 equals) #:encoding charset)
+                 (uri-decode (substring piece (1+ equals)) #:encoding charset))
+           (cons (uri-decode piece #:encoding charset) ""))))
    (string-split str #\&)))
 
 (define (request-relative-path r)
@@ -88,7 +88,7 @@
                  (charset (or (assoc-ref (cdr content-type) "charset")
                               "utf-8")))
             (cond
-             ((equal? (car content-type) "application/x-www-form-urlencoded")
+             ((equal? (car content-type) 'application/x-www-form-urlencoded)
               (parse-www-form-urlencoded body charset))
              (else
               (error "bad content-type" content-type)))))))
@@ -97,13 +97,11 @@
 (define (request-authenticated? request)
   (let ((auth (request-authorization request)))
     (and auth
-         (match-bind "^Basic ([A-Za-z0-9+/=]*)$" auth (_ b64)
-                     (match-bind "^([^:]*):(.*)$"
-                                 (utf8->string (base64-decode b64))
-                                 (_ user pass)
-                                 (and (equal? user *admin-user*)
-                                      (equal? pass *admin-pass*))
-                                 #f)
+         (match-bind "^([^:]*):(.*)$"
+                     (utf8->string (base64-decode (cdr auth)))
+                     (_ user pass)
+                     (and (equal? user *admin-user*)
+                          (equal? pass *admin-pass*))
                      #f))))
 
 (define-syntax path-proc-case

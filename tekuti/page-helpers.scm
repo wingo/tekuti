@@ -82,8 +82,8 @@
                   last-modified
                   etag
                   (doctype xhtml-doctype)
-                  (content-type-params '(("charset" . "utf-8")))
-                  (content-type "text/html")
+                  (content-type-params '((charset . "utf-8")))
+                  (content-type 'text/html)
                   (extra-headers '())
                   (sxml (and body (templatize #:title title #:body body))))
   (values (build-response
@@ -378,9 +378,10 @@
 (define (with-authentication request thunk)
   (if (request-authenticated? request)
       (thunk)
-      (respond `((p "Authentication required, yo"))
-               #:status 401
-               #:extra-headers '((www-authenticate . "Basic realm=\"Tekuti\"")))))
+      (let ((header (parse-header 'www-authenticate "Basic realm=\"Tekuti\"")))
+        (respond `((p "Authentication required, yo"))
+                 #:status 401
+                 #:extra-headers `((www-authenticate . ,header))))))
 
 (define (atom-header last-modified)
   (define (relurl . tail)
