@@ -164,8 +164,8 @@
                        5)
        key #t))))
 
-(define space-to-dash (s///g " " "-"))
-(define remove-extraneous (s///g "[^a-z-]+" ""))
+(define space-to-dash (s///g "[ .]" "-"))
+(define remove-extraneous (s///g "[^a-z0-9-]+" ""))
 (define collapse (s///g "-+" "-"))
 
 (define (title->name title)

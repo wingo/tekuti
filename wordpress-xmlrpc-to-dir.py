@@ -148,7 +148,7 @@ def get_post_images(post, url, imgdir):
 
 def write_post(post, categories, comments, images_url, new_images_url):
     print "writing post %s" % unescape(post["title"])
-    def make_metadata():
+    def make_metadata(key):
         out = ""
         keys = {"postid" : "id",
                 "wp_author_display_name" : "author",
@@ -163,6 +163,7 @@ def write_post(post, categories, comments, images_url, new_images_url):
                 else:
                     value = "closed"
             out += "%s: %s\n" % (keys[k], value)
+        out += "name: %s\n" % key
         out += "tags: %s\n" % ", ".join(categories)
         out += "timestamp: %s\n" % int(time.mktime(post["dateCreated"].timetuple()))
         return unicode(out)
@@ -172,7 +173,7 @@ def write_post(post, categories, comments, images_url, new_images_url):
     content = string.replace(post["description"], images_url, new_images_url)
     content = analyze_media(content)
     write_file(d + "content", content)
-    write_file(d + "metadata", make_metadata())
+    write_file(d + "metadata", make_metadata(key))
     if comments:
         c = make_dir(d + "comments")
         for comment in comments:
