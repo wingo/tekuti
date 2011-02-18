@@ -192,6 +192,10 @@
                      (action ,(relurl `("admin" "delete-post" ,(post-key post)))))
                   " "
                   (input (@ (type "submit") (name "delete") (value "delete"))))
+            ,@(let ((l (comments-sxml-content-edit post)))
+                (if (null? l) l
+                    `((h2 "comments")
+                      (ol (@ (class "commentlist")) ,@l))))
             (h2 "preview")
             ,(show-post post #f))
           '())))
@@ -238,6 +242,18 @@
     (p (input (@ (name "submit") (type "submit") (id "submit") (tabindex "5")
                  (value "Submit Comment"))))))
 
+(define (comments-sxml-content-edit post)
+  (map 
+   (lambda (comment)
+     (let ((id (assq-ref comment 'key)))
+       `(,(comment-sxml-content comment)
+         (form (@ (method "POST")
+                   (action ,(relurl `("admin" "delete-comment"
+                                      ,(post-key post) ,id))))
+                (input (@ (type "submit") (name "delete") (value "delete"))))
+         (br))))
+   (post-comments post)))
+  
 (define (post-sxml-comments post)
   (let ((comments (post-comments post))
         (comments-open? (post-comments-open? post)))

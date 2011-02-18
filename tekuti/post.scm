@@ -202,16 +202,11 @@
   (munge-post old-key (parse-post-data post-data)))
 
 (define (delete-post key)
-  (define (maybe-delete ops)
-      (if (and old-key (not (equal? old-key key)))
-          (cons  ops)
-          ops))
-  (let* ((ops `((delete () (,key))))
-         (post (post-from-key "refs/heads/master" key))
+  (let* ((post (post-from-key "refs/heads/master" key))
          (message (format #f "~a: \"~a\"" "post deleted" (post-title post))))
     (git-update-ref "refs/heads/master"
                   (lambda (master)
-                    (git-commit-tree (munge-tree master ops)
+                    (git-commit-tree (munge-tree1 master 'delete '() `(,key))
                                      master message #f))
                   5)))
 

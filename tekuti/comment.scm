@@ -29,12 +29,14 @@
   #:use-module (tekuti git)
   #:use-module (tekuti util)
   #:use-module (tekuti filters)
+  #:use-module (tekuti post)
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-19)
   #:use-module (sxml transform)
   #:use-module (tekuti match-bind)
   #:export (blob->comment comment-sxml-content comment-timestamp
-            comment-readable-date bad-new-comment-post? make-new-comment))
+            comment-readable-date bad-new-comment-post?
+            make-new-comment delete-comment))
 
 (define *comment-spec*
   `((timestamp . ,string->number)))
@@ -146,3 +148,15 @@
                                        (list sha1 sha1 'blob))
                           master message #f))
        5))))
+
+(define (delete-comment post id)
+  (let ((key (post-key post))
+        (message (format #f "~a on \"~a\"" "comment deleted" (post-title post))))
+    (git-update-ref "refs/heads/master"
+                  (lambda (master)
+                    (git-commit-tree (munge-tree1 master
+                                                  'delete
+                                                  `(,key "comments")
+                                                  `(,id))
+                                     master message #f))
+                  5)))

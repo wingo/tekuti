@@ -42,6 +42,7 @@
             page-admin-new-post
             page-admin-modify-post 
             page-admin-delete-post 
+            page-admin-delete-comment
             page-admin-changes 
             page-admin-change
             page-admin-revert-change
@@ -132,6 +133,14 @@
    (lambda ()
      (delete-post key)
      (respond `((p "redirecting...")) #:redirect (relurl `("admin"))))))
+     
+(define (page-admin-delete-comment request body index key comment-id)
+  (with-authentication
+   request
+   (lambda ()
+     (let ((post (post-from-key (assq-ref index 'master) key #t)))
+       (delete-comment post comment-id)
+       (respond `((p "redirecting...")) #:redirect (admin-post-url post))))))
      
 (define (page-admin-changes request body index) 
   (with-authentication

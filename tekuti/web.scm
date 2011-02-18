@@ -44,6 +44,7 @@
    ;; web browsers don't handle that
    ((POST admin delete-post post-key!) page-admin-delete-post)
    ((POST admin modify-post post-key!) page-admin-modify-post)
+   ((POST admin delete-comment post-key! comment-id!) page-admin-delete-comment)
    ((GET admin changes) page-admin-changes)
    ((GET admin changes sha1!) page-admin-change)
    ((POST admin revert-change sha1!) page-admin-revert-change)
