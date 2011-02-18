@@ -328,7 +328,7 @@
       (respond #f
                #:last-modified (and=> last-modified timestamp->date)
                #:doctype #f
-               #:content-type "application/atom+xml"
+               #:content-type 'application/atom+xml
                #:etag (assq-ref index 'master)
                #:sxml (append (atom-header last-modified)
                               (map

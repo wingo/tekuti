@@ -112,7 +112,7 @@
                "&"))
 
 (define* (relative-url uri path-components #:key query fragment)
-  (unparse-uri
+  (uri->string
    (build-uri (uri-scheme uri)
               #:userinfo (uri-userinfo uri) #:host (uri-host uri) 
               #:port (uri-port uri)
@@ -385,7 +385,7 @@
 
 (define (atom-header last-modified)
   (define (relurl . tail)
-    (unparse-uri (ensure-public-uri tail)))
+    (uri->string (ensure-public-uri tail)))
   `(feed
      (@ (xmlns "http://www.w3.org/2005/Atom") (xml:base ,(relurl)))
      (title (@ (type "text")) ,*title*)
@@ -404,7 +404,7 @@
 
 (define (atom-entry post)
   (define (relurl . tail)
-    (unparse-uri (ensure-public-uri tail)))
+    (uri->string (ensure-public-uri tail)))
   `(entry
     (author (name ,*name*) (uri ,(relurl)))
     (title (@ (type "text")) ,(post-title post))
