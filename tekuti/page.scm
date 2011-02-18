@@ -41,6 +41,7 @@
             page-admin-post
             page-admin-new-post
             page-admin-modify-post 
+            page-admin-delete-post 
             page-admin-changes 
             page-admin-change
             page-admin-revert-change
@@ -124,6 +125,13 @@
      (let ((post (modify-post key (request-form-data request body))))
        (respond `((p "redirecting..."))
                 #:redirect (admin-post-url post))))))
+     
+(define (page-admin-delete-post request body index key)
+  (with-authentication
+   request
+   (lambda ()
+     (delete-post key)
+     (respond `((p "redirecting...")) #:redirect (relurl `("admin"))))))
      
 (define (page-admin-changes request body index) 
   (with-authentication

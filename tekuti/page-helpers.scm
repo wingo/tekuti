@@ -188,7 +188,11 @@
           (input (@ (type "submit") (name "status")
                     (value "draft"))))
     ,@(if post
-          `((h2 "preview")
+          `((form (@ (method "POST")
+                     (action ,(relurl `("admin" "delete-post" ,(post-key post)))))
+                  " "
+                  (input (@ (type "submit") (name "delete") (value "delete"))))
+            (h2 "preview")
             ,(show-post post #f))
           '())))
 

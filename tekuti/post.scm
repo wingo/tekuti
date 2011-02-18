@@ -1,5 +1,5 @@
 ;; Tekuti
-;; Copyright (C) 2008, 2010 Andy Wingo <wingo at pobox dot com>
+;; Copyright (C) 2008, 2010, 2011 Andy Wingo <wingo at pobox dot com>
 
 ;; This program is free software; you can redistribute it and/or    
 ;; modify it under the terms of the GNU General Public License as   
@@ -43,8 +43,8 @@
             post-raw-content
             post-title
 
-            make-new-post modify-post
-
+            make-new-post modify-post delete-post
+            
             all-published-posts
 
             reindex-posts))
@@ -200,6 +200,20 @@
 
 (define (modify-post old-key post-data)
   (munge-post old-key (parse-post-data post-data)))
+
+(define (delete-post key)
+  (define (maybe-delete ops)
+      (if (and old-key (not (equal? old-key key)))
+          (cons  ops)
+          ops))
+  (let* ((ops `((delete () (,key))))
+         (post (post-from-key "refs/heads/master" key))
+         (message (format #f "~a: \"~a\"" "post deleted" (post-title post))))
+    (git-update-ref "refs/heads/master"
+                  (lambda (master)
+                    (git-commit-tree (munge-tree master ops)
+                                     master message #f))
+                  5)))
 
 (define (all-posts master)
   (map (lambda (pair)
