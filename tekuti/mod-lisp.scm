@@ -1,5 +1,5 @@
 ;; Tekuti
-;; Copyright (C) 2008, 2010 Andy Wingo <wingo at pobox dot com>
+;; Copyright (C) 2008, 2010, 2011 Andy Wingo <wingo at pobox dot com>
 
 ;; This program is free software; you can redistribute it and/or    
 ;; modify it under the terms of the GNU General Public License as   
@@ -36,63 +36,30 @@
   #:use-module (web server))
 
 
-;;; FIXME: ignore SIGPIPE, otherwise apache dying will kill us
-
 (define *mod-lisp-headers* (make-hash-table))
 
-(define (define-mod-lisp-header! sym name parser)
-  (hash-set! *mod-lisp-headers* name (cons sym parser)))
+(define (define-mod-lisp-header! name parser)
+  (hashq-set! *mod-lisp-headers* (string->symbol (string-downcase name))
+              (cons name parser)))
 
-(define (mod-lisp-sym-and-parser name)
-  (hash-ref *mod-lisp-headers* name))
+(define-mod-lisp-header! "server-protocol" parse-http-version)
+(define-mod-lisp-header! "method" parse-http-method)
+(define-mod-lisp-header! "url" parse-request-uri)
+(define-mod-lisp-header! "server-ip-addr" identity)
+(define-mod-lisp-header! "server-ip-port" string->number)
+(define-mod-lisp-header! "remote-ip-addr" identity)
+(define-mod-lisp-header! "remote-ip-port" string->number)
+(define-mod-lisp-header! "server-id" identity)
+(define-mod-lisp-header! "server-ip-addr" identity)
+(define-mod-lisp-header! "server-baseversion" identity)
+(define-mod-lisp-header! "modlisp-version" identity)
+(define-mod-lisp-header! "modlisp-major-version" string->number)
 
-(define-mod-lisp-header! 'server-protocol
-  "server-protocol"
-  parse-http-version)
+(define (lookup-mod-lisp-header sym)
+  (hashq-ref *mod-lisp-headers* sym))
 
-(define-mod-lisp-header! 'method
-  "method"
-  parse-http-method)
-
-(define-mod-lisp-header! 'url
-  "url"
-  parse-request-uri)
-
-(define-mod-lisp-header! 'server-ip-addr
-  "server-ip-addr"
-  identity)
-
-(define-mod-lisp-header! 'server-ip-port
-  "server-ip-port"
-  string->number)
-
-(define-mod-lisp-header! 'remote-ip-addr
-  "remote-ip-addr"
-  identity)
-
-(define-mod-lisp-header! 'remote-ip-port
-  "remote-ip-port"
-  string->number)
-
-(define-mod-lisp-header! 'server-id
-  "server-id"
-  identity)
-
-(define-mod-lisp-header! 'server-ip-addr
-  "server-ip-addr"
-  identity)
-
-(define-mod-lisp-header! 'server-baseversion
-  "server-baseversion"
-  identity)
-
-(define-mod-lisp-header! 'modlisp-version
-  "modlisp-version"
-  identity)
-
-(define-mod-lisp-header! 'modlisp-major-version
-  "modlisp-major-version"
-  string->number)
+(define (parse-mod-lisp-header hpair val)
+  ((cdr hpair) val))
 
 (define (read-headers/mod-lisp socket)
   (define (read-line*)
@@ -101,19 +68,16 @@
           (error "unexpected eof")
           line)))
   (let lp ((headers '()) (meta '()))
-    (let ((k (read-line*)))
-      (if (string=? k "end")
+    (let ((k (string->symbol (string-downcase (read-line*)))))
+      (if (eq? k 'end)
           (values (reverse! headers) (reverse! meta))
-          (let ((sym-and-parser (mod-lisp-sym-and-parser k))
+          (let ((mod-lisp-header (lookup-mod-lisp-header k))
                 (v (read-line*)))
-            (if sym-and-parser
+            (if mod-lisp-header
                 (lp headers
-                    (acons (car sym-and-parser)
-                           ((cdr sym-and-parser) v)
-                           meta))
-                (call-with-values (lambda () (parse-header k v))
-                  (lambda (k v)
-                    (lp (acons k v headers) meta)))))))))
+                    (acons k (parse-mod-lisp-header mod-lisp-header v) meta))
+                (lp (acons k (parse-header k v) headers)
+                    meta)))))))
 
 (define (read-request/mod-lisp port)
   ;; See the note in (web request) regarding chars, bytes, and strings
@@ -122,30 +86,25 @@
   (call-with-values (lambda () (read-headers/mod-lisp port))
     (lambda (headers meta)
       (build-request
+       (assq-ref meta 'url)
        #:method (assq-ref meta 'method)
-       #:uri (assq-ref meta 'url)
        #:version (assq-ref meta 'server-protocol)
        #:headers headers
        #:meta meta
        #:port port))))
 
+;; Note, we only write HTTP headers here, not mod-lisp headers.
 (define (write-header/mod-lisp name val port)
-  (if (string? name)
-      ;; assume that it's a header we don't know about...
-      (begin
-        (display name port) (newline port)
-        (display val port) (newline port))
-      (let ((decl (lookup-header-decl name)))
-        (if (not decl)
-            (error "Unknown header" name)
-            (begin
-              (display (header-decl-name decl) port) (newline port)
-              ((header-decl-writer decl) val port) (newline port))))))
+  (display (header->string name) port)
+  (newline port)
+  ((header-writer name) val port)
+  (newline port))
 
 (define (write-response-line/mod-lisp code phrase port)
-  (write-header/mod-lisp "Status"
-                         (string-append (number->string code) " " phrase)
-                         port))
+  (display "Status" port)
+  (newline port)
+  (display (string-append (number->string code) " " phrase) port)
+  (newline port))
 
 (define (write-headers/mod-lisp headers port)
   (for-each
@@ -248,7 +207,7 @@
                  (let ((req (read-request/mod-lisp port)))
                    (values port
                            req
-                           (read-request-body/latin-1 req))))
+                           (read-request-body req))))
                (lambda (k . args)
                  (false-if-exception (close-port port)))))))))))))
 
@@ -257,12 +216,10 @@
   (let ((response (write-response/mod-lisp response client)))
     (cond
      ((not body))                       ; pass
-     ((string? body)
-      (write-response-body/latin-1 response body))
      ((bytevector? body)
-      (write-response-body/bytevector response body))
+      (write-response-body response body))
      (else
-      (error "Expected a string or bytevector for body" body)))
+      (error "Expected a bytevector for body" body)))
     (close-port (response-port response))))
 
 ;; -> unspecified values
