@@ -87,7 +87,6 @@
   (let* ((real-args (trc (redirect-input (prepend-env args))))
          (pipe (apply open-pipe* OPEN_READ real-args))
          (output (begin
-                   (set-port-encoding! pipe "ISO-8859-1")
                    (let ((bv (get-bytevector-all pipe)))
                      (if (eof-object? bv)
                          ""
