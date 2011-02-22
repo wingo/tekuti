@@ -1,5 +1,5 @@
 ;; Tekuti
-;; Copyright (C) 2008, 2010 Andy Wingo <wingo at pobox dot com>
+;; Copyright (C) 2008, 2010, 2011 Andy Wingo <wingo at pobox dot com>
 
 ;; This program is free software; you can redistribute it and/or    
 ;; modify it under the terms of the GNU General Public License as   
@@ -31,7 +31,7 @@
   #:use-module (tekuti config)
   #:use-module (tekuti match-bind)
   #:use-module (rnrs bytevectors)
-  #:use-module (rnrs io ports)
+  #:use-module (ice-9 binary-ports)
   #:use-module ((srfi srfi-1) #:select (filter-map partition
                                         delete-duplicates))
   #:use-module (srfi srfi-34)
