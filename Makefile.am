@@ -17,7 +17,6 @@ SOURCES =					\
 	tekuti/request.scm			\
 	tekuti/tags.scm				\
 	tekuti/template.scm			\
-	tekuti/url.scm				\
 	tekuti/util.scm				\
 	tekuti/web.scm
 

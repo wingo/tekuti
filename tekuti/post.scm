@@ -26,9 +26,9 @@
 
 (define-module (tekuti post)
   #:use-module (srfi srfi-1)
+  #:use-module (web uri)
   #:use-module (tekuti match-bind)
   #:use-module (tekuti util)
-  #:use-module (tekuti url)
   #:use-module (tekuti comment)
   #:use-module (tekuti config)
   #:use-module (tekuti git)
@@ -190,10 +190,10 @@
         (comment_status . ,(if comments-open? "open" "closed"))
         (timestamp . ,timestamp)
         (name . ,name)
-        (key . ,(url:encode
+        (key . ,(uri-encode
                  (string-append (date->string (timestamp->date timestamp)
                                               "~Y/~m/~d/")
-                                (url:encode name))))))))
+                                (uri-encode name))))))))
 
 (define (make-new-post post-data)
   (munge-post #f (parse-post-data post-data)))
