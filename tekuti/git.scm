@@ -235,7 +235,7 @@
 ;; probably the best that we can do, given that git does not track
 ;; directory renames.
 (define (git-commit-reverse-operations sha1)
-  (with-input-from-string (git "diff-tree" "-R" "-r" sha1)
+  (with-input-from-string* (git "diff-tree" "-R" "-r" sha1)
     (lambda ()
       (read-line) ;; throw away the header
       (let lp ((ops '()))
@@ -339,7 +339,7 @@
      (- ts (* (+ (* (quotient tz 100) 60) (remainder tz 100)) 60)))))
 
 (define (with-output-to-blob* thunk)
-  (git-hash-object (with-output-to-string thunk)))
+  (git-hash-object (with-output-to-string* thunk)))
 
 (define-syntax with-output-to-blob
   (syntax-rules ()
@@ -347,7 +347,7 @@
      (with-output-to-blob* (lambda () f f* ...)))))
 
 (define (with-input-from-blob* sha1 thunk)
-  (with-input-from-string (git "show" sha1) thunk))
+  (with-input-from-string* (git "show" sha1) thunk))
 
 (define-syntax with-input-from-blob
   (syntax-rules ()

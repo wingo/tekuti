@@ -1,5 +1,5 @@
 ;; Tekuti
-;; Copyright (C) 2008, 2010 Andy Wingo <wingo at pobox dot com>
+;; Copyright (C) 2008, 2010, 2011 Andy Wingo <wingo at pobox dot com>
 
 ;; This program is free software; you can redistribute it and/or    
 ;; modify it under the terms of the GNU General Public License as   
@@ -79,7 +79,7 @@
             (cons (car in) (pclose p out))))))))
 
 (define (wordpress->sxml text)
-  (let ((sxml (cadr (with-input-from-string (string-append "<div>" text "</div>")
+  (let ((sxml (cadr (with-input-from-string* (string-append "<div>" text "</div>")
                       xml->sxml))))
     (pre-post-order
      sxml

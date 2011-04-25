@@ -1,5 +1,5 @@
 ;; Tekuti
-;; Copyright (C) 2008, 2010 Andy Wingo <wingo at pobox dot com>
+;; Copyright (C) 2008, 2010, 2011 Andy Wingo <wingo at pobox dot com>
 
 ;; This program is free software; you can redistribute it and/or    
 ;; modify it under the terms of the GNU General Public License as   
@@ -28,7 +28,8 @@
   #:use-module (tekuti match-bind)
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-19)
-  #:export (expanduser match-lines dbg unwind-protect dsu-sort
+  #:export (with-output-to-string* with-input-from-string*
+            expanduser match-lines dbg unwind-protect dsu-sort
             hash-push! list-has-length? list-head-match mapn filter-mapn
             take-max read-hash write-hash shell:quote foldn
             call-with-temp-file emailish? urlish?
@@ -36,6 +37,19 @@
             rfc822-date->timestamp timestamp->rfc822-date timestamp->atom-date
             date->timestamp timestamp->date string-split/trimming
             list-intersperse with-time-debugging))
+
+(define (with-output-to-string* thunk)
+  (let ((port (open-output-string)))
+    (with-output-to-port port thunk)
+    (let ((str (get-output-string port)))
+      (close-port port)
+      str)))
+
+(define (with-input-from-string* str thunk)
+  (let* ((port (open-input-string str))
+         (res (with-input-from-port port thunk)))
+    (close-port port)
+    res))
 
 (define (emailish? x)
   (match-bind "^([a-zA-Z0-9._+-]+)@([a-zA-Z0-9-]+\\.)+[a-zA-Z]+$"
@@ -75,7 +89,7 @@
      (delete-file template))))
 
 (define (shell:quote str)
-  (with-output-to-string
+  (with-output-to-string*
     (lambda ()
       (display #\')
       (string-for-each (lambda (ch)
