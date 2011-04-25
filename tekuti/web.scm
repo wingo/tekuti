@@ -1,5 +1,5 @@
 ;; Tekuti
-;; Copyright (C) 2008, 2010 Andy Wingo <wingo at pobox dot com>
+;; Copyright (C) 2008, 2010, 2011 Andy Wingo <wingo at pobox dot com>
 
 ;; This program is free software; you can redistribute it and/or    
 ;; modify it under the terms of the GNU General Public License as   
@@ -54,7 +54,6 @@
    ((POST archives year! month! day! post!) page-new-comment)
    ((GET feed) page-feed-atom)
    ((GET feed atom) page-feed-atom)
-   ((GET feed atom tag!) page-feed-atom-tag)
    ((POST search) page-search)
    ((GET tags) page-show-tags)
    ((GET tags tag!) page-show-tag)

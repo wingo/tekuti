@@ -1,5 +1,5 @@
 ;; Tekuti
-;; Copyright (C) 2008, 2010 Andy Wingo <wingo at pobox dot com>
+;; Copyright (C) 2008, 2010, 2011 Andy Wingo <wingo at pobox dot com>
 
 ;; This program is free software; you can redistribute it and/or    
 ;; modify it under the terms of the GNU General Public License as   
@@ -34,6 +34,7 @@
   #:use-module (web request)
   #:use-module (tekuti request)
   #:use-module (tekuti page-helpers)
+  #:use-module ((srfi srfi-1) #:select (fold))
   #:use-module (srfi srfi-34)
   #:use-module (srfi srfi-19)
   #:export (page-admin
@@ -55,7 +56,6 @@
             page-debug 
             page-search 
             page-feed-atom
-            page-feed-atom-tag
             page-debug
             page-not-found))
 
@@ -337,14 +337,28 @@
                                  (atom-entry post))
                                posts)))))))
 
-
 (define (page-feed-atom request body index)
-  (atom-feed-from-posts request body index (published-posts index 10)))
-
-(define (page-feed-atom-tag request body index tag)
-  (let* ((tags (assq-ref index 'tags))
-         (posts (filter-mapn (lambda (key)
-                               (post-from-key (assq-ref index 'master) key))
-                             (hash-ref tags tag '())
-                             10)))
-  (atom-feed-from-posts request body index posts)))
+  (let ((with (request-query-ref-all request "with"))
+        (without (request-query-ref-all request "without"))
+        (tags (assq-ref index 'tags))
+        (posts (assq-ref index 'posts))
+        (master (assq-ref index 'master)))
+    (atom-feed-from-posts
+     request body index
+     (filter-mapn (fold (lambda (tag cont)
+                          (let ((posts (hash-ref tags tag '())))
+                            (lambda (post)
+                              (and (not (member (post-key post) posts))
+                                   (cont post)))))
+                        (fold (lambda (tag cont)
+                                (let ((posts (hash-ref tags tag '())))
+                                  (lambda (post)
+                                    (and (member (post-key post) posts)
+                                         (cont post)))))
+                              (lambda (post)
+                                (and (post-published? post)
+                                     post))
+                              with)
+                        without)
+                  posts
+                  10))))

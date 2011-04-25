@@ -25,7 +25,7 @@
 ;;; Code:
 
 (define-module (tekuti request)
-  #:use-module ((srfi srfi-1) #:select (find-tail))
+  #:use-module ((srfi srfi-1) #:select (find-tail filter-map))
   #:use-module (tekuti match-bind)
   #:use-module (tekuti util)
   #:use-module (web uri)
@@ -38,6 +38,7 @@
   #:export (request-relative-path
             request-relative-path-str
             request-query-ref
+            request-query-ref-all
             request-path-case
             request-authenticated?
             request-form-data))
@@ -67,6 +68,15 @@
     (cond
      ((and q (assoc param (parse-www-form-urlencoded q))) => cdr)
      (else default))))
+
+(define (request-query-ref-all r param)
+  (let ((q (uri-query (request-uri r))))
+    (if q
+        (filter-map (lambda (pair)
+                      (and (equal? (car pair) param)
+                           (cdr pair)))
+                    (parse-www-form-urlencoded q))
+        '())))
 
 (define (decode-string bv charset)
   (if (string-ci=? charset "utf-8")
