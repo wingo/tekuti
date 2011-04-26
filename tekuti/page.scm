@@ -286,7 +286,10 @@
                        (post-from-key (assq-ref index 'master) key))
                      (hash-ref tags tag '()))))
     (if (pair? posts)
-        (respond `((h2 "posts tagged \"" ,tag "\"")
+        (respond `((h2 "posts tagged \"" ,tag "\" ("
+                       ,(rellink '("feed" "atom") "feed"
+                                 #:query `(("with" . ,tag)))
+                       ")")
                    ,@(map (lambda (post) `(p ,(post-link post)))
                           posts)
                    ,(related-tag-cloud tag index)) 
