@@ -1,5 +1,5 @@
 ;; Tekuti
-;; Copyright (C) 2008, 2010 Andy Wingo <wingo at pobox dot com>
+;; Copyright (C) 2008, 2010, 2012 Andy Wingo <wingo at pobox dot com>
 
 ;; This program is free software; you can redistribute it and/or    
 ;; modify it under the terms of the GNU General Public License as   
@@ -26,6 +26,7 @@
 
 (define-module (tekuti index)
   #:use-module ((srfi srfi-1) #:select (fold))
+  #:use-module (system repl error-handling)
   #:use-module (tekuti util)
   #:use-module (tekuti git)
   #:use-module (tekuti post)
@@ -93,15 +94,14 @@
   (let ((master (git-rev-parse "refs/heads/master")))
     (if (equal? (assq-ref old-index 'master) master)
         old-index
-        (catch #t
-               (lambda ()
-                 (let ((new-index (reindex old-index master)))
-                   (acons
-                    'index (write-index new-index (assq-ref old-index 'index))
-                    new-index)))
-               (lambda (key . args)
-                 (warn "error while reindexing:" key args)
-                 old-index)))))
+        (call-with-error-handling
+         (lambda ()
+           (let ((new-index (reindex old-index master)))
+             (acons
+              'index (write-index new-index (assq-ref old-index 'index))
+              new-index)))
+         #:on-error 'backtrace
+         #:post-error (lambda _ old-index)))))
 
 (define (update-index index key update)
   (cond
