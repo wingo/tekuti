@@ -1,5 +1,5 @@
 ;; Tekuti
-;; Copyright (C) 2008, 2010 Andy Wingo <wingo at pobox dot com>
+;; Copyright (C) 2008, 2010, 2012 Andy Wingo <wingo at pobox dot com>
 
 ;; This program is free software; you can redistribute it and/or    
 ;; modify it under the terms of the GNU General Public License as   
@@ -54,8 +54,7 @@
     hash))
 
 (define (compute-related-posts post index)
-  (let ((hash (assq-ref index 'tags))
-        (master (assq-ref index 'master)))
+  (let ((hash (assq-ref index 'tags)))
     (if hash
         (let ((accum (make-hash-table)))
           (for-each
@@ -69,7 +68,7 @@
           (dsu-sort (dsu-sort
                      (hash-fold
                       (lambda (key tags rest)
-                        (acons (post-from-key master key) tags rest))
+                        (acons (post-from-key index key) tags rest))
                       '() accum)
                      (lambda (x) (post-timestamp (car x)))
                      >)
@@ -77,8 +76,7 @@
         '())))
 
 (define (compute-related-tags tag index)
-  (let ((hash (assq-ref index 'tags))
-        (master (assq-ref index 'master)))
+  (let ((hash (assq-ref index 'tags)))
     (if hash
         (let ((accum (make-hash-table)))
           (for-each
@@ -87,7 +85,7 @@
               (lambda (other-tag)
                 (if (not (equal? other-tag tag))
                     (hash-push! accum other-tag key)))
-              (post-tags (post-from-key master key))))
+              (post-tags (post-from-key index key))))
            (or (hash-ref hash tag) '()))
           (dsu-sort
            (hash-fold
@@ -99,4 +97,4 @@
         '())))
 
 (define (reindex-tags old-index index)
-  (compute-tags (filter post-published? (assq-ref index 'posts))))
+  (compute-tags (latest-posts index #:limit -1)))

@@ -1,5 +1,5 @@
 ;; Tekuti
-;; Copyright (C) 2008, 2010, 2011 Andy Wingo <wingo at pobox dot com>
+;; Copyright (C) 2008, 2010, 2011, 2012 Andy Wingo <wingo at pobox dot com>
 
 ;; This program is free software; you can redistribute it and/or    
 ;; modify it under the terms of the GNU General Public License as   
@@ -75,10 +75,9 @@
    (lambda ()
      ;; here we need to be giving a dashboard view instead of this
      (define (post-links n)
-       (mapn (lambda (post)
-               `(li ,(admin-post-link post)))
-             (assq-ref index 'posts)
-             n))
+       (map (lambda (post)
+              `(li ,(admin-post-link post)))
+            (latest-posts index #:allow-unpublished? #t #:limit n)))
      (define (recent-changes n)
        (map (lambda (rev)
               `(li ,(rellink `("admin" "changes" ,(car rev))
@@ -100,7 +99,7 @@
      (define (post-headers)
        (map (lambda (post)
               `(h3 ,(admin-post-link post)))
-            (assq-ref index 'posts)))
+            (latest-posts index #:allow-unpublished? #t #:limit -1)))
      (respond `((h1 "all your posts are belong to tekuti")
                 ,@(post-headers))))))
 
@@ -108,7 +107,7 @@
   (with-authentication
    request
    (lambda ()
-     (let ((post (post-from-key (assq-ref index 'master) key #t)))
+     (let ((post (post-from-key index key #:allow-unpublished? #t)))
        (respond `((h1 ,(post-title post))
                   ,(post-editing-form post)))))))
 
@@ -132,14 +131,14 @@
   (with-authentication
    request
    (lambda ()
-     (delete-post key)
+     (delete-post (post-from-key index key #:allow-unpublished? #t))
      (respond `((p "redirecting...")) #:redirect (relurl `("admin"))))))
      
 (define (page-admin-delete-comment request body index key comment-id)
   (with-authentication
    request
    (lambda ()
-     (let ((post (post-from-key (assq-ref index 'master) key #t)))
+     (let ((post (post-from-key index key #:allow-unpublished? #t)))
        (delete-comment post comment-id)
        (respond `((p "redirecting...")) #:redirect (admin-post-url post))))))
      
@@ -189,13 +188,12 @@
   (respond `(,(main-sidebar request index)
              ,@(map (lambda (post)
                       (show-post post #f))
-                    (published-posts index 10)))
+                    (latest-posts index #:limit 10)))
            #:etag (assq-ref index 'master)))
 
 (define (page-show-post request body index year month day post)
   (cond
-   ((post-from-key (assq-ref index 'master)
-                   (make-post-key year month day post))
+   ((post-from-key index (make-post-key year month day post))
     => (lambda (post)
          (respond `(,(post-sidebar post index)
                     ,(show-post post #t))
@@ -207,8 +205,7 @@
 (define (page-new-comment request body index year month day name)
   (let ((data (request-form-data request body)))
     (cond
-     ((post-from-key (assq-ref index 'master)
-                     (make-post-key year month day name))
+     ((post-from-key index (make-post-key year month day name))
       => (lambda (post)
            (cond
             ((bad-new-comment-post? data)
@@ -243,7 +240,7 @@
       (define (make-date-header post)
         (lambda (x) #f))
     
-      (let lp ((posts (published-posts index -1)))
+      (let lp ((posts (latest-posts index #:limit -1)))
         (cond ((or (null? posts) (too-early? (car posts)))
                (respond `((h1 "No posts found")
                           (p "No posts were found in the specified period."))
@@ -283,7 +280,7 @@
 (define (page-show-tag request body index tag)
   (let* ((tags (assq-ref index 'tags))
          (posts (map (lambda (key)
-                       (post-from-key (assq-ref index 'master) key))
+                       (post-from-key index key))
                      (hash-ref tags tag '()))))
     (if (pair? posts)
         (respond `((h2 "posts tagged \"" ,tag "\" ("
@@ -343,9 +340,7 @@
 (define (page-feed-atom request body index)
   (let ((with (request-query-ref-all request "with"))
         (without (request-query-ref-all request "without"))
-        (tags (assq-ref index 'tags))
-        (posts (assq-ref index 'posts))
-        (master (assq-ref index 'master)))
+        (tags (assq-ref index 'tags)))
     (define include?
       (if (pair? with)
           (fold (lambda (tag cont)
@@ -369,9 +364,8 @@
     
     (atom-feed-from-posts
      request body index
-     (filter-mapn (lambda (post)
-                    (and (include? post) (not (exclude? post))
-                         (post-published? post)
-                         post))
-                  posts
-                  10))))
+     (latest-posts index
+                   #:filter
+                   (lambda (post)
+                     (and (include? post) (not (exclude? post))))
+                   #:limit 10))))

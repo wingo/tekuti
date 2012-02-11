@@ -35,7 +35,8 @@
   #:export (maybe-reindex read-index update-index))
 
 (define index-specs
-  `((posts ,reindex-posts ,write ,read)
+  `((posts ,reindex-posts ,write-hash ,read-hash)
+    (posts-by-date ,reindex-posts-by-date ,write ,read)
     (tags ,reindex-tags ,write-hash ,read-hash)
     (cache ,(lambda _ (make-empty-cache)) ,(lambda (x) #f) ,(lambda () '()))))
 

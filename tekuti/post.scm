@@ -1,5 +1,5 @@
 ;; Tekuti
-;; Copyright (C) 2008, 2010, 2011 Andy Wingo <wingo at pobox dot com>
+;; Copyright (C) 2008, 2010, 2011, 2012 Andy Wingo <wingo at pobox dot com>
 
 ;; This program is free software; you can redistribute it and/or    
 ;; modify it under the terms of the GNU General Public License as   
@@ -35,7 +35,7 @@
   #:use-module (tekuti filters)
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-19)
-  #:export (post-from-tree post-from-key
+  #:export (post-from-key
 
             post-tags post-timestamp post-key post-published?
             post-comments-open? post-comments
@@ -44,14 +44,14 @@
             post-title
 
             make-new-post modify-post delete-post
-            
-            all-published-posts
 
-            reindex-posts))
+            latest-posts
 
-;;; 
+            reindex-posts reindex-posts-by-date))
+
+;;;
 ;;; pulling posts out of git
-;;; 
+;;;
 
 (define *post-spec*
   `((timestamp . ,string->number)
@@ -69,15 +69,21 @@
                              identity)))
              (cons k (parse v))))))
 
-(define (post-from-key master key . allow-unpublished)
+(define (post-from-git master key)
   (false-if-git-error
    (let ((pairs (git-ls-subdirs master key)))
      (and (= (length pairs) 1)
-          (let ((post (post-from-tree key (cdar pairs))))
-            (if (or (post-published? post)
-                    (and (pair? allow-unpublished) (car allow-unpublished)))
-                post
-                #f))))))
+          (post-from-tree key (cdar pairs))))))
+
+;;;
+;;; pulling posts out of the index
+;;;
+
+(define* (post-from-key index key #:key allow-unpublished?)
+  (let ((post (hash-ref (assq-ref index 'posts) key)))
+    (if (and post (or (post-published? post) allow-unpublished?))
+        post
+        #f)))
 
 ;;; 
 ;;; accessors
@@ -156,13 +162,13 @@
                 (maybe-clear
                  `((create (,key) ("metadata" ,metadata blob))
                    (create (,key) ("content" ,content blob)))))))
-      (post-from-key
+      (post-from-git
        (git-update-ref "refs/heads/master"
                        (lambda (master)
                          (git-commit-tree (munge-tree master ops)
                                           master message #f))
                        5)
-       key #t))))
+       key))))
 
 (define space-to-dash (s///g "[ .]" "-"))
 (define remove-extraneous (s///g "[^a-z0-9-]+" ""))
@@ -201,41 +207,45 @@
 (define (modify-post old-key post-data)
   (munge-post old-key (parse-post-data post-data)))
 
-(define (delete-post key)
-  (let* ((post (post-from-key "refs/heads/master" key))
-         (message (format #f "~a: \"~a\"" "post deleted" (post-title post))))
+(define (delete-post post)
+  (let ((message (format #f "~a: \"~a\"" "post deleted" (post-title post))))
     (git-update-ref "refs/heads/master"
                   (lambda (master)
-                    (git-commit-tree (munge-tree1 master 'delete '() `(,key))
-                                     master message #f))
+                    (git-commit-tree
+                     (munge-tree1 master 'delete '() `(,(post-key post)))
+                     master message #f))
                   5)))
 
-(define (all-posts master)
-  (map (lambda (pair)
-         (post-from-tree (car pair) (cdr pair)))
-       (git-ls-subdirs master #f)))
+(define* (latest-posts index #:key allow-unpublished? (filter identity)
+                       (limit 10))
+  (filter-mapn
+   (lambda (key)
+     (and=> (post-from-key index key #:allow-unpublished? allow-unpublished?)
+            (lambda (post) (and post (filter post) post))))
+   (assq-ref index 'posts-by-date)
+   limit))
 
-(define (all-published-posts master)
-  (dsu-sort
-   (filter post-published? (all-posts master))
-   post-timestamp
-   >))
+(define (reindex-posts old-index index)
+  (let ((old (assq-ref old-index 'posts))
+        (new (make-hash-table)))
+    (for-each
+     (lambda (dent)
+       (let* ((key (car dent))
+              (sha1 (cadr dent))
+              (prev (and (hash-table? old) (hash-ref old key))))
+         (hash-set! new key
+                    (if (and prev (equal? (assq-ref prev 'sha1) sha1))
+                        prev
+                        (begin
+                          (pk 'updated dent)
+                          (post-from-tree key sha1))))))
+     (git-ls-tree (assq-ref index 'master) #f))
+    new))
 
-(define (hash-fill proc list)
-  (let ((table (make-hash-table)))
-    (for-each (lambda (x) (proc x table))
-              list)
-    table))
-
-(define (reindex-posts oldindex newindex)
-  (let ((old (hash-fill (lambda (post h)
-                          (hash-set! h (assq-ref post 'sha1) post))
-                        (or (assq-ref oldindex 'posts) '()))))
-    (dsu-sort (map (lambda (dent)
-                     (or (hash-ref old (cadr dent))
-                         (begin (pk 'updated dent)
-                                (post-from-tree (car dent) (cadr dent)))))
-                   (git-ls-tree (assq-ref newindex 'master) #f))
-              post-timestamp
-              >)))
-
+(define (reindex-posts-by-date old-index index)
+  (map cdr
+       (sort (hash-map->list (lambda (key post)
+                               (cons (post-timestamp post) key))
+                             (assq-ref index 'posts))
+             (lambda (x y)
+               (> (car x) (car y))))))

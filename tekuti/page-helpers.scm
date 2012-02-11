@@ -1,5 +1,5 @@
 ;; Tekuti
-;; Copyright (C) 2008, 2010 Andy Wingo <wingo at pobox dot com>
+;; Copyright (C) 2008, 2010, 2012 Andy Wingo <wingo at pobox dot com>
 
 ;; This program is free software; you can redistribute it and/or    
 ;; modify it under the terms of the GNU General Public License as   
@@ -41,7 +41,6 @@
   #:export (respond
             relurl rellink
             post-url
-            published-posts
             post-editing-form
             sidebar-ul top-tags tag-cloud
             main-sidebar post-sidebar related-tag-cloud
@@ -150,12 +149,6 @@
 (define* (rellink path-components text #:key query fragment)
   (relative-path-link *public-path-base* path-components text #:query query
                       #:fragment fragment))
-
-(define (published-posts index n)
-  (filter-mapn (lambda (post)
-                 (and (post-published? post) post))
-               (assq-ref index 'posts)
-               n))
 
 (define (post-editing-form post)
   `(div
@@ -371,7 +364,7 @@
                         (git "grep" "-l" "-F" string master "--" "*/content"))
                        "")
                    ":(.+)/content$" (_ key)
-                   (post-from-key master key)))
+                   (post-from-key index key)))
      post-timestamp
      >)))
 
