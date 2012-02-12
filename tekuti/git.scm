@@ -1,16 +1,16 @@
 ;; Tekuti
-;; Copyright (C) 2008, 2010, 2011 Andy Wingo <wingo at pobox dot com>
+;; Copyright (C) 2008, 2010, 2011, 2012 Andy Wingo <wingo at pobox dot com>
 
-;; This program is free software; you can redistribute it and/or    
-;; modify it under the terms of the GNU General Public License as   
-;; published by the Free Software Foundation; either version 3 of   
-;; the License, or (at your option) any later version.              
-;;                                                                  
-;; This program is distributed in the hope that it will be useful,  
-;; but WITHOUT ANY WARRANTY; without even the implied warranty of   
-;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the    
-;; GNU General Public License for more details.                     
-;;                                                                  
+;; This program is free software; you can redistribute it and/or
+;; modify it under the terms of the GNU General Public License as
+;; published by the Free Software Foundation; either version 3 of
+;; the License, or (at your option) any later version.
+;;
+;; This program is distributed in the hope that it will be useful,
+;; but WITHOUT ANY WARRANTY; without even the implied warranty of
+;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+;; GNU General Public License for more details.
+;;
 ;; You should have received a copy of the GNU General Public License
 ;; along with this program; if not, contact:
 ;;
@@ -44,7 +44,7 @@
             git-commit-tree git-rev-list git-revert
 
             munge-tree munge-tree1 parse-commit commit-utc-timestamp
-            
+
             with-output-to-blob with-input-from-blob))
 
 
@@ -65,7 +65,7 @@
 
 ;;;
 ;;; running git
-;;; 
+;;;
 
 (define *debug* #f)
 (define (trc . args)
@@ -114,7 +114,7 @@
 
 ;;;
 ;;; git commands
-;;; 
+;;;
 
 (define (is-dir? path)
   (catch 'system-error
@@ -215,9 +215,9 @@
                          (format #f "GIT_AUTHOR_DATE=~a +0100" timestamp))
                    (list "GIT_COMMMITTER=tekuti")))))
 
-;;; 
+;;;
 ;;; utilities
-;;; 
+;;;
 
 ;; unused.
 (define (patch-blob sha1 patch)

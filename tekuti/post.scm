@@ -1,16 +1,16 @@
 ;; Tekuti
 ;; Copyright (C) 2008, 2010, 2011, 2012 Andy Wingo <wingo at pobox dot com>
 
-;; This program is free software; you can redistribute it and/or    
-;; modify it under the terms of the GNU General Public License as   
-;; published by the Free Software Foundation; either version 3 of   
-;; the License, or (at your option) any later version.              
-;;                                                                  
-;; This program is distributed in the hope that it will be useful,  
-;; but WITHOUT ANY WARRANTY; without even the implied warranty of   
-;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the    
-;; GNU General Public License for more details.                     
-;;                                                                  
+;; This program is free software; you can redistribute it and/or
+;; modify it under the terms of the GNU General Public License as
+;; published by the Free Software Foundation; either version 3 of
+;; the License, or (at your option) any later version.
+;;
+;; This program is distributed in the hope that it will be useful,
+;; but WITHOUT ANY WARRANTY; without even the implied warranty of
+;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+;; GNU General Public License for more details.
+;;
 ;; You should have received a copy of the GNU General Public License
 ;; along with this program; if not, contact:
 ;;
@@ -85,9 +85,9 @@
         post
         #f)))
 
-;;; 
+;;;
 ;;; accessors
-;;; 
+;;;
 
 (define (post-published? post-alist)
   (equal? (assq-ref post-alist 'status) "publish"))
@@ -145,7 +145,7 @@
                     '(timestamp tags status title name comment_status))))
         (content (with-output-to-blob (display (assq-ref parsed 'body))))
         (key (assq-ref parsed 'key))
-        (message (format #f "~a: \"~a\"" 
+        (message (format #f "~a: \"~a\""
                          (if old-key "post modified" "new post")
                          (assq-ref parsed 'title))))
     (define (maybe-rename ops)

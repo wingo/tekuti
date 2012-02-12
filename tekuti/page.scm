@@ -1,16 +1,16 @@
 ;; Tekuti
 ;; Copyright (C) 2008, 2010, 2011, 2012 Andy Wingo <wingo at pobox dot com>
 
-;; This program is free software; you can redistribute it and/or    
-;; modify it under the terms of the GNU General Public License as   
-;; published by the Free Software Foundation; either version 3 of   
-;; the License, or (at your option) any later version.              
-;;                                                                  
-;; This program is distributed in the hope that it will be useful,  
-;; but WITHOUT ANY WARRANTY; without even the implied warranty of   
-;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the    
-;; GNU General Public License for more details.                     
-;;                                                                  
+;; This program is free software; you can redistribute it and/or
+;; modify it under the terms of the GNU General Public License as
+;; published by the Free Software Foundation; either version 3 of
+;; the License, or (at your option) any later version.
+;;
+;; This program is distributed in the hope that it will be useful,
+;; but WITHOUT ANY WARRANTY; without even the implied warranty of
+;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+;; GNU General Public License for more details.
+;;
 ;; You should have received a copy of the GNU General Public License
 ;; along with this program; if not, contact:
 ;;
@@ -41,20 +41,20 @@
             page-admin-posts
             page-admin-post
             page-admin-new-post
-            page-admin-modify-post 
-            page-admin-delete-post 
+            page-admin-modify-post
+            page-admin-delete-post
             page-admin-delete-comment
-            page-admin-changes 
+            page-admin-changes
             page-admin-change
             page-admin-revert-change
-            page-index 
-            page-show-post 
+            page-index
+            page-show-post
             page-new-comment
-            page-archives 
+            page-archives
             page-show-tags
             page-show-tag
-            page-debug 
-            page-search 
+            page-debug
+            page-search
             page-feed-atom
             page-debug
             page-not-found))
@@ -126,14 +126,14 @@
      (let ((post (modify-post key (request-form-data request body))))
        (respond `((p "redirecting..."))
                 #:redirect (admin-post-url post))))))
-     
+
 (define (page-admin-delete-post request body index key)
   (with-authentication
    request
    (lambda ()
      (delete-post (post-from-key index key #:allow-unpublished? #t))
      (respond `((p "redirecting...")) #:redirect (relurl `("admin"))))))
-     
+
 (define (page-admin-delete-comment request body index key comment-id)
   (with-authentication
    request
@@ -141,8 +141,8 @@
      (let ((post (post-from-key index key #:allow-unpublished? #t)))
        (delete-comment post comment-id)
        (respond `((p "redirecting...")) #:redirect (admin-post-url post))))))
-     
-(define (page-admin-changes request body index) 
+
+(define (page-admin-changes request body index)
   (with-authentication
    request
    (lambda ()
@@ -160,7 +160,7 @@
                                 #:query
                                 `(("start" . ,(caar (last-pair revs))))))))))))
 
-(define (page-admin-change request body index sha1) 
+(define (page-admin-change request body index sha1)
   (with-authentication
    request
    (lambda ()
@@ -239,7 +239,7 @@
             (lambda (post) #t)))
       (define (make-date-header post)
         (lambda (x) #f))
-    
+
       (let lp ((posts (latest-posts index #:limit -1)))
         (cond ((or (null? posts) (too-early? (car posts)))
                (respond `((h1 "No posts found")
@@ -289,7 +289,7 @@
                        ")")
                    ,@(map (lambda (post) `(p ,(post-link post)))
                           posts)
-                   ,(related-tag-cloud tag index)) 
+                   ,(related-tag-cloud tag index))
                  #:etag (assq-ref index 'master)
                  #:title (string-append "posts tagged \"" tag "\""))
         (respond `((h2 "Unknown tag " ,tag)
@@ -361,7 +361,7 @@
                       (cont post)))))
             (lambda (post) #f)
             without))
-    
+
     (atom-feed-from-posts
      request body index
      (latest-posts index

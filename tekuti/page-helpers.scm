@@ -1,16 +1,16 @@
 ;; Tekuti
 ;; Copyright (C) 2008, 2010, 2012 Andy Wingo <wingo at pobox dot com>
 
-;; This program is free software; you can redistribute it and/or    
-;; modify it under the terms of the GNU General Public License as   
-;; published by the Free Software Foundation; either version 3 of   
-;; the License, or (at your option) any later version.              
-;;                                                                  
-;; This program is distributed in the hope that it will be useful,  
-;; but WITHOUT ANY WARRANTY; without even the implied warranty of   
-;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the    
-;; GNU General Public License for more details.                     
-;;                                                                  
+;; This program is free software; you can redistribute it and/or
+;; modify it under the terms of the GNU General Public License as
+;; published by the Free Software Foundation; either version 3 of
+;; the License, or (at your option) any later version.
+;;
+;; This program is distributed in the hope that it will be useful,
+;; but WITHOUT ANY WARRANTY; without even the implied warranty of
+;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+;; GNU General Public License for more details.
+;;
 ;; You should have received a copy of the GNU General Public License
 ;; along with this program; if not, contact:
 ;;
@@ -113,7 +113,7 @@
 (define* (relative-url uri path-components #:key query fragment)
   (uri->string
    (build-uri (uri-scheme uri)
-              #:userinfo (uri-userinfo uri) #:host (uri-host uri) 
+              #:userinfo (uri-userinfo uri) #:host (uri-host uri)
               #:port (uri-port uri)
               #:path (encode-and-join-uri-path
                       (append (split-and-decode-uri-path (uri-path uri))
@@ -236,7 +236,7 @@
                  (value "Submit Comment"))))))
 
 (define (comments-sxml-content-edit post)
-  (map 
+  (map
    (lambda (comment)
      (let ((id (assq-ref comment 'key)))
        `(,(comment-sxml-content comment)
@@ -246,7 +246,7 @@
                 (input (@ (type "submit") (name "delete") (value "delete"))))
          (br))))
    (post-comments post)))
-  
+
 (define (post-sxml-comments post)
   (let ((comments (post-comments post))
         (comments-open? (post-comments-open? post)))
@@ -297,7 +297,7 @@
     (if hash
         (dsu-sort
          (take-max
-          (dsu-sort         
+          (dsu-sort
            (hash-fold (lambda (k v seed) (acons k (length v) seed))
                       '() hash)
            cdr >) n)
