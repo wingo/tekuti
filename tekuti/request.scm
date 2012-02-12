@@ -1,5 +1,5 @@
 ;; Tekuti
-;; Copyright (C) 2008, 2010, 2011 Andy Wingo <wingo at pobox dot com>
+;; Copyright (C) 2008, 2010, 2011, 2012 Andy Wingo <wingo at pobox dot com>
 
 ;; This program is free software; you can redistribute it and/or    
 ;; modify it under the terms of the GNU General Public License as   
@@ -162,7 +162,14 @@
 (define-syntax request-path-case
   (syntax-rules ()
     ((_ request clause ...)
-     (let ((r request))
+     (let* ((r request)
+            (method (request-method r)))
        (path-proc-case
-        (cons (symbol->string (request-method r)) (request-relative-path r))
+        (cons (symbol->string
+               (case method
+                 ;; Treat HEAD as GET, for the purposes of dispatching
+                 ;; requests.
+                 ((HEAD) 'GET)
+                 (else method)))
+              (request-relative-path r))
         clause ...)))))
