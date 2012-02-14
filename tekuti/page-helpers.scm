@@ -94,11 +94,10 @@
                       date (current-date)
                       etag (if (string? etag) (cons etag #t) etag)
                       extra-headers))
-          (lambda (port)
-            (if sxml
-                (begin
-                  (if doctype (display doctype port))
-                  (sxml->xml sxml port))))))
+          (and sxml
+               (lambda (port)
+                 (if doctype (display doctype port))
+                 (sxml->xml sxml port)))))
 
 (define (unparse-www-form-urlencoded alist)
   (string-join (map (lambda (pair)
