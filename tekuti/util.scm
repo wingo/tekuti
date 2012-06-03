@@ -28,6 +28,7 @@
   #:use-module (tekuti match-bind)
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-19)
+  #:use-module (web uri)
   #:export (with-output-to-string* with-input-from-string*
             expanduser match-lines dbg unwind-protect dsu-sort
             hash-push! list-has-length? list-head-match mapn filter-mapn
@@ -59,10 +60,11 @@
 
 ;; hacky #fragment interpreting...
 (define (urlish? x)
-  (match-bind "^https?://([a-zA-Z0-9-]+\\.)+[a-zA-Z]+(/[a-zA-Z0-9$_.+!*'(),;/?:#@&=-]*)?$"
-              x (_ . args)
-              x
-              #f))
+  (let ((uri (string->uri x)))
+    (and uri
+         (memq (uri-scheme uri) '(http https))
+         (uri-host uri)
+         #t)))
 
 ;; bad name relative to mapn...
 (define (foldn kons n knil values)
