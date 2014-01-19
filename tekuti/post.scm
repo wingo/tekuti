@@ -1,5 +1,5 @@
 ;; Tekuti
-;; Copyright (C) 2008, 2010, 2011, 2012 Andy Wingo <wingo at pobox dot com>
+;; Copyright (C) 2008, 2010, 2011, 2012, 2014 Andy Wingo <wingo at pobox dot com>
 
 ;; This program is free software; you can redistribute it and/or
 ;; modify it under the terms of the GNU General Public License as
@@ -196,10 +196,11 @@
         (comment_status . ,(if comments-open? "open" "closed"))
         (timestamp . ,timestamp)
         (name . ,name)
-        (key . ,(uri-encode
-                 (string-append (date->string (timestamp->date timestamp)
-                                              "~Y/~m/~d/")
-                                (uri-encode name))))))))
+        (key . ,(string-downcase
+                 (uri-encode
+                  (string-append (date->string (timestamp->date timestamp)
+                                               "~Y/~m/~d/")
+                                 (uri-encode name)))))))))
 
 (define (make-new-post post-data)
   (munge-post #f (parse-post-data post-data)))
