@@ -61,7 +61,7 @@
 
 ;; Encoded twice, so as to form a single path-component.
 (define (make-post-key . parts)
-  (uri-encode (encode-and-join-uri-path parts)))
+  (string-downcase (uri-encode (encode-and-join-uri-path parts))))
 
 (define (not-implemented request . args)
   (respond `((h1 "Not yet implemented")
