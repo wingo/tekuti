@@ -54,6 +54,7 @@
     (head (title ,title)
           (meta (@ (name "Generator")
                    (content "An unholy concoction of parenthetical guile")))
+          (meta (@ (name "viewport") (content "width=device-width")))
           (link (@ (rel "stylesheet")
                    (type "text/css")
                    (media "screen")
