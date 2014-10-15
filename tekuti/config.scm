@@ -1,5 +1,5 @@
 ;; Tekuti
-;; Copyright (C) 2008, 2010, 2012 Andy Wingo <wingo at pobox dot com>
+;; Copyright (C) 2008, 2010, 2012, 2014 Andy Wingo <wingo at pobox dot com>
 
 ;; This program is free software; you can redistribute it and/or
 ;; modify it under the terms of the GNU General Public License as
@@ -27,13 +27,14 @@
 (define-module (tekuti config)
   #:use-module (tekuti util)
   #:use-module ((sxml ssax) #:select (define-parsed-entity!))
-  #:export (*public-host* *public-port* *public-path-base*
+  #:export (*public-scheme* *public-host* *public-port* *public-path-base*
             *private-host* *private-port* *private-path-base*
             *git-dir* *git* *debug* *admin-user* *admin-pass*
             *css-file* *navbar-links* *navbar-infix*
             *title* *subtitle* *name*
             *server-impl* *server-impl-args*))
 
+(define *public-scheme* 'http)
 (define *public-host* "127.0.0.1")
 (define *public-port* 8080)
 (define *public-path-base* '())

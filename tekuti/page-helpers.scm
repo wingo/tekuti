@@ -65,13 +65,23 @@
     ((_ tail)
      tail)))
 
-(define (ensure-public-uri x)
+(define (ensure-uri x)
   (cond
    ((uri? x) x)
    ((string? x)
-    (build-uri 'http #:host *public-host* #:port *public-port* #:path x))
+    (build-uri *public-scheme* #:host *public-host* #:port *public-port*
+               #:path x))
    ((list? x)
-    (ensure-public-uri (relurl x)))
+    (ensure-uri (relurl x)))
+   (else (error "can't turn into a uri" x))))
+
+(define (ensure-uri-reference x)
+  (cond
+   ((uri? x) x)
+   ((string? x)
+    (build-uri-reference #:path x))
+   ((list? x)
+    (ensure-uri-reference (relurl x)))
    (else (error "can't turn into a uri" x))))
 
 (define* (respond #:optional body #:key
@@ -88,7 +98,7 @@
   (values (build-response
            #:code status
            #:headers (build-headers
-                      location (and=> redirect ensure-public-uri)
+                      location (and=> redirect ensure-uri-reference)
                       last-modified last-modified
                       content-type (cons content-type content-type-params)
                       date (current-date)
@@ -377,7 +387,7 @@
 
 (define (atom-header last-modified)
   (define (relurl . tail)
-    (uri->string (ensure-public-uri tail)))
+    (uri->string (ensure-uri tail)))
   `(feed
      (@ (xmlns "http://www.w3.org/2005/Atom") (xml:base ,(relurl)))
      (title (@ (type "text")) ,*title*)
@@ -396,7 +406,7 @@
 
 (define (atom-entry post)
   (define (relurl . tail)
-    (uri->string (ensure-public-uri tail)))
+    (uri->string (ensure-uri tail)))
   `(entry
     (author (name ,*name*) (uri ,(relurl)))
     (title (@ (type "text")) ,(post-title post))
