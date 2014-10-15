@@ -71,5 +71,5 @@
           (div (@ (id "content")) ,@body)
           (div (@ (id "footer"))
                "powered by "
-               (a (@ (href "http://wingolog.org/software/tekuti/"))
+               (a (@ (href "//wingolog.org/software/tekuti/"))
                   "tekuti"))))))
