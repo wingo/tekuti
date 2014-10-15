@@ -1,5 +1,5 @@
 ;; Tekuti
-;; Copyright (C) 2008, 2010, 2011, 2012 Andy Wingo <wingo at pobox dot com>
+;; Copyright (C) 2008, 2010, 2011, 2012, 2014 Andy Wingo <wingo at pobox dot com>
 
 ;; This program is free software; you can redistribute it and/or
 ;; modify it under the terms of the GNU General Public License as
@@ -62,7 +62,7 @@
 (define (urlish? x)
   (let ((uri (string->uri x)))
     (and uri
-         (memq (uri-scheme uri) '(http https))
+         (memq (uri-scheme uri) '(#f http https))
          (uri-host uri)
          #t)))
 
