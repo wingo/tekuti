@@ -1,0 +1,24 @@
+server {
+	listen 80 default_server;
+	listen [::]:80 default_server ipv6only=on;
+
+	root /var/www/example.com;
+	index index.html;
+
+	# Make site accessible from http://example.com/
+	server_name example.com;
+
+	location = / { proxy_pass http://127.0.0.1:8080/; }
+	location /archives { proxy_pass http://127.0.0.1:8080/archives; }
+	location /feed { proxy_pass http://127.0.0.1:8080/feed; }
+	location /search { proxy_pass http://127.0.0.1:8080/search; }
+	location /tags { proxy_pass http://127.0.0.1:8080/tags; }
+	location /debug { proxy_pass http://127.0.0.1:8080/debug; }
+	location /admin { proxy_pass http://127.0.0.1:8080/admin; }
+
+	location / {
+		# First attempt to serve request as file, then
+		# as directory, then fall back to displaying a 404.
+		try_files $uri $uri/ =404;
+	}
+}
