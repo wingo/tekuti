@@ -1,5 +1,5 @@
 ;; Tekuti
-;; Copyright (C) 2008, 2010, 2012 Andy Wingo <wingo at pobox dot com>
+;; Copyright (C) 2008, 2010, 2012, 2014 Andy Wingo <wingo at pobox dot com>
 
 ;; This program is free software; you can redistribute it and/or
 ;; modify it under the terms of the GNU General Public License as
@@ -79,7 +79,10 @@
   (cond
    ((uri? x) x)
    ((string? x)
-    (build-uri-reference #:path x))
+    (if (defined? 'build-uri-reference)
+        (build-uri-reference #:path x)
+        ;; Absolute URIs on older Guile.
+        (ensure-uri x)))
    ((list? x)
     (ensure-uri-reference (relurl x)))
    (else (error "can't turn into a uri" x))))
