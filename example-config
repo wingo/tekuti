@@ -1,0 +1,17 @@
+;; -*- scheme -*-
+(set! *navbar-links*
+      '(("about" . "/about/")
+        ("cat pictures" . "/cat-pictures/")))
+(set! *navbar-infix* " | ")
+(set! *public-host* "example.com")
+(set! *public-port* 80)
+(set! *public-path-base* '())
+(set! *private-host* "127.0.0.1")
+(set! *private-port* 8080)
+(set! *private-path-base* '())
+
+(define *admin-pass* "password")
+(define *title* "kittens")
+(define *subtitle* "all about kittens")
+(define *name* "Jane Doe")
+
