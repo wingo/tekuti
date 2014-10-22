@@ -103,7 +103,8 @@
 
 (define (expanduser path)
   (let ((parts (string-split path #\/)))
-    (if (eqv? (string-ref (car parts) 0) #\~)
+    (if (and (not (string-null? (car parts)))
+             (eqv? (string-ref (car parts) 0) #\~))
         (let ((user (if (= (string-length (car parts)) 1)
                         (passwd:name (getpwuid (geteuid)))
                         (substring (car parts) 1))))
