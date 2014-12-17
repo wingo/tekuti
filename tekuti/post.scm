@@ -37,7 +37,8 @@
   #:use-module (srfi srfi-19)
   #:export (post-from-key
 
-            post-tags post-timestamp post-key post-published?
+            post-tags post-timestamp post-key
+            post-public? post-draft? post-private?
             post-comments-open? post-comments
             post-sxml-content post-readable-date post-n-comments
             post-raw-content
@@ -79,9 +80,11 @@
 ;;; pulling posts out of the index
 ;;;
 
-(define* (post-from-key index key #:key allow-unpublished?)
+(define* (post-from-key index key #:key allow-unpublished? allow-draft?)
   (let ((post (hash-ref (assq-ref index 'posts) key)))
-    (if (and post (or (post-published? post) allow-unpublished?))
+    (if (and post (or (post-public? post)
+                      (and (post-draft? post) allow-draft?)
+                      allow-unpublished?))
         post
         #f)))
 
@@ -89,8 +92,14 @@
 ;;; accessors
 ;;;
 
-(define (post-published? post-alist)
+(define (post-public? post-alist)
   (equal? (assq-ref post-alist 'status) "publish"))
+
+(define (post-draft? post-alist)
+  (equal? (assq-ref post-alist 'status) "draft"))
+
+(define (post-private? post-alist)
+  (equal? (assq-ref post-alist 'status) "private"))
 
 (define (post-timestamp post-alist)
   (assq-ref post-alist 'timestamp))

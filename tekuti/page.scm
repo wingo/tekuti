@@ -193,7 +193,8 @@
 
 (define (page-show-post request body index year month day post)
   (cond
-   ((post-from-key index (make-post-key year month day post))
+   ((post-from-key index (make-post-key year month day post)
+                   #:allow-draft? #t)
     => (lambda (post)
          (respond `(,(post-sidebar post index)
                     ,(show-post post #t))
