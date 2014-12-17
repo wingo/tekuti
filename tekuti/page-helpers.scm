@@ -193,7 +193,7 @@
                                     '())))
                     "private (only visible to admin)") (br)
              (label (input (@ (type "radio") (name "status") (value "draft")
-                              ,@(if (or (not post) (post-draft? post))
+                              ,@(if (and post (post-draft? post))
                                     '((checked "checked"))
                                     '())))
                     "draft (only accessible via "
@@ -205,7 +205,7 @@
 
              (br)
              (label (input (@ (type "radio") (name "status") (value "publish")
-                              ,@(if (or (not post) (post-public? post))
+                              ,@(if (and post (post-public? post))
                                     '((checked "checked"))
                                     '())))
                     "public"))
