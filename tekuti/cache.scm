@@ -72,17 +72,21 @@
        (lambda (request)
          (and (equal? (request-uri request) uri)
               (eq? (request-method request) method)
-              (let ((last-modified (response-last-modified response))
+              (let ((request-etags (request-if-none-match request))
                     (since (request-if-modified-since request)))
-                (if (and last-modified since)
-                    (time<=? (date->time-utc last-modified)
-                             (date->time-utc since))
-                    #t))
-              (let ((etag (response-etag response))
-                    (match (request-if-none-match request)))
-                (if (and etag match)
-                    (and (list? match) (member etag match))
-                    #t))
+                (and
+                 ;; Only return a 304 if the request is conditional.
+                 (or request-etags since)
+                 ;; If the request specifies an etag set, honor it.
+                 (or (not request-etags)
+                     (and (list? request-etags)
+                          (member (response-etag response) request-etags)))
+                 ;; Likewise for if-modified-since.
+                 (or (not since)
+                     (let ((last-modified (response-last-modified response)))
+                       (and last-modified
+                            (time<=? (date->time-utc last-modified)
+                                     (date->time-utc since)))))))
               (cons response body))))
       ((200)
        (lambda (request)
