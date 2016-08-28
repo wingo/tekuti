@@ -322,7 +322,7 @@
                             (post-timestamp (car posts)))))
     (cond
      ((let ((since (request-if-modified-since request)))
-        (and since (>= (date->timestamp since) last-modified)))
+        (and since last-modified (>= (date->timestamp since) last-modified)))
       (respond #f #:status 304
                #:last-modified (timestamp->date last-modified)
                #:etag (assq-ref index 'master)))
