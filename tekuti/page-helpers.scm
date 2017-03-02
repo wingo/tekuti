@@ -257,7 +257,7 @@
        " " (label (@ (for "url")) (small "Website")))
     (p (input (@ (type "text") (name "x") (value "")
                  (size "22") (tabindex "3")))
-       " " (label (@ (for "x")) (small "What's your favorite number?")))
+       " " (label (@ (for "x")) (small "What's a number between 34 and 42?")))
     ;(p (small "allowed tags: "))
     (p (textarea (@ (name "comment") (id "comment") (cols "65")
                     (rows "10") (tabindex "4"))

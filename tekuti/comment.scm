@@ -30,6 +30,7 @@
   #:use-module (tekuti util)
   #:use-module (tekuti filters)
   #:use-module (tekuti post)
+  #:use-module (ice-9 match)
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-19)
   #:use-module (sxml transform)
@@ -95,10 +96,12 @@
       `(p "Bad URL. (Only http and https are allowed.)")))
 
 (define (bad-number? x)
-  (if (string->number x)
-      #f
-      '(p "Bad number. Give me something that Scheme's "
-          (tt "string->number") " will like.")))
+  (match (string->number x)
+    (#f '(p "Bad number. Give me something that Scheme's "
+            (tt "string->number") " will like."))
+    (n (if (and (real? n) (<= 34 n 42))
+           #f
+           '(p "Number not between 34 and 42.")))))
 
 (define *new-comment-spec*
   `(("author" ,(lambda (x) #f))

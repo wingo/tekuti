@@ -171,7 +171,7 @@
        (let ((s (string-trim-both (call-with-input-file rev read-line))))
          (and (= (string-length s) 40)
               s)))
-      (git "rev-parse" rev)))
+      (string-trim-both (git "rev-parse" rev))))
 
 (define (git-rev-list rev n)
   (let lp ((lines (string-split

@@ -25,6 +25,7 @@
 ;;; Code:
 
 (define-module (tekuti index)
+  #:use-module (ice-9 match)
   #:use-module ((srfi srfi-1) #:select (fold))
   #:use-module (system repl error-handling)
   #:use-module (tekuti util)
@@ -80,16 +81,19 @@
     new))
 
 (define (read-index)
-  (let* ((ref (false-if-git-error (git-rev-parse "refs/heads/index")))
-         (dents (if ref (git-ls-tree ref #f) '())))
-    (acons 'index ref
-           (and (and-map (lambda (spec)
-                           (assoc (symbol->string (car spec)) dents))
-                         index-specs)
-                (map (lambda (dent)
-                       (cons (string->symbol (car dent))
-                             (blob->index (car dent) (cadr dent))))
-                     dents)))))
+  (match (false-if-git-error (git-rev-parse "refs/heads/index"))
+    (#f (maybe-reindex '()))
+    (ref
+     (let ((dents (git-ls-tree ref #f)))
+       (if (and-map (lambda (spec)
+                      (assoc (symbol->string (car spec)) dents))
+                    index-specs)
+           (acons 'index ref
+                  (map (lambda (dent)
+                         (cons (string->symbol (car dent))
+                               (blob->index (car dent) (cadr dent))))
+                       dents))
+           (maybe-reindex (acons 'index ref '())))))))
 
 (define (maybe-reindex old-index)
   (let ((master (git-rev-parse "refs/heads/master")))
