@@ -65,6 +65,16 @@
 (define (comment-raw-content comment)
   (assq-ref comment 'raw-content))
 
+(define (neutralize-links sxml)
+  (pre-post-order
+   sxml
+   `((a . ,(lambda sxml
+             (match sxml
+               (('a ('@ . attrs) . body)
+                `(a (@ (rel "external nofollow") . ,attrs) . ,body)))))
+     (*default* . ,(lambda sxml sxml))
+     (*text* . ,(lambda (tag text) text)))))
+
 (define (comment-sxml-content comment)
   `(li (@ (class "alt") (id ,(assq-ref comment 'key)))
        (cite ,(let ((url (assq-ref comment 'author_url))
@@ -76,11 +86,12 @@
        (small (@ (class "commentmetadata"))
               (a (@ (href ,(string-append "#" (assq-ref comment 'key))))
                  ,(comment-readable-date comment)))
-       ,(let ((format (or (assq-ref comment 'format) 'wordpress)))
-          ((case format
-             ((wordpress) wordpress->sxml)
-             (else (lambda (text) `(pre ,text))))
-           (comment-raw-content comment)))))
+       ,(neutralize-links
+         (let ((format (or (assq-ref comment 'format) 'wordpress)))
+           ((case format
+              ((wordpress) wordpress->sxml)
+              (else (lambda (text) `(pre ,text))))
+            (comment-raw-content comment))))))
 
 (define (comment-timestamp comment-alist)
   (or (assq-ref comment-alist 'timestamp) #f))
