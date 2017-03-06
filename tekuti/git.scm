@@ -1,5 +1,5 @@
 ;; Tekuti
-;; Copyright (C) 2008, 2010, 2011, 2012 Andy Wingo <wingo at pobox dot com>
+;; Copyright (C) 2008, 2010, 2011, 2012, 2017 Andy Wingo <wingo at pobox dot com>
 
 ;; This program is free software; you can redistribute it and/or
 ;; modify it under the terms of the GNU General Public License as
@@ -79,7 +79,7 @@
   (define (prepend-env args)
     (if (null? env)
         args
-        (cons "/run/current-system/profile/bin/env" (append env args))))
+        (cons "env" (append env args))))
   (define (redirect-input args)
     (if input-file
         (list "/bin/sh" "-c"
