@@ -27,6 +27,7 @@
 (define-module (tekuti git)
   #:use-module (ice-9 rdelim)
   #:use-module (ice-9 popen)
+  #:use-module (ice-9 textual-ports)
   #:use-module (tekuti util)
   #:use-module (tekuti config)
   #:use-module (tekuti match-bind)
@@ -44,6 +45,7 @@
             git-commit-tree git-rev-list git-revert
 
             munge-tree munge-tree1 parse-commit commit-utc-timestamp
+            fold-commits
 
             with-output-to-blob with-input-from-blob))
 
@@ -77,7 +79,7 @@
   (define (prepend-env args)
     (if (null? env)
         args
-        (cons "/usr/bin/env" (append env args))))
+        (cons "/run/current-system/profile/bin/env" (append env args))))
   (define (redirect-input args)
     (if input-file
         (list "/bin/sh" "-c"
@@ -86,11 +88,7 @@
         args))
   (let* ((real-args (trc (redirect-input (prepend-env args))))
          (pipe (apply open-pipe* OPEN_READ real-args))
-         (output (begin
-                   (let ((bv (get-bytevector-all pipe)))
-                     (if (eof-object? bv)
-                         ""
-                         (utf8->string bv)))))
+         (output (get-string-all pipe))
          (ret (close-pipe pipe)))
     (case (status:exit-val ret)
       ((0) output)
@@ -334,6 +332,14 @@
       (match-lines (substring text 0 (- (string-length text) (string-length _)))
                    "^([^ ]+) (.*)$" (_ k v)
                    (cons (string->symbol k) v))))))
+
+(define (fold-commits f rev seed)
+  (let lp ((rev (git-rev-parse rev)) (seed seed))
+    (if rev
+        (let ((commit (parse-commit rev)))
+          (lp (assq-ref commit 'parent)
+              (f rev commit seed)))
+        seed)))
 
 (define (commit-utc-timestamp commit)
   (match-bind

@@ -37,7 +37,8 @@
   #:use-module (tekuti match-bind)
   #:export (blob->comment comment-sxml-content comment-timestamp
             comment-readable-date bad-new-comment-post?
-            make-new-comment delete-comment))
+            parse-new-comment make-new-comment delete-comment
+            compute-legit-comments compute-bogus-comments))
 
 (define *comment-spec*
   `((timestamp . ,string->number)))
@@ -137,31 +138,38 @@
 
 (define de-newline (s///g "[\n\r]" " "))
 
-(define (make-new-comment key title post-data)
+(define (parse-new-comment post-data)
   (let ((content (assoc-ref post-data "comment"))
         (author (assoc-ref post-data "author"))
         (email (assoc-ref post-data "email"))
         (url (assoc-ref post-data "url")))
-    (let ((sha1 (with-output-to-blob
-                 (for-each
-                  (lambda (pair)
-                    (format #t "~a: ~a\n" (car pair) (cdr pair)))
-                  `((timestamp . ,(time-second (current-time)))
-                    (author . ,(de-newline author))
-                    (author_email . ,email)
-                    (author_url . ,url)))
-                 (display "\n")
-                 (display content)))
-          (message (format #f "comment on \"~a\" by ~a" title author)))
-      (git-update-ref
-       "refs/heads/master"
-       (lambda (master)
-         (git-commit-tree (munge-tree1 master
-                                       'create
-                                       (list key "comments")
-                                       (list sha1 sha1 'blob))
-                          master message #f))
-       5))))
+    `((timestamp . ,(time-second (current-time)))
+      (author . ,(de-newline author))
+      (author_email . ,email)
+      (author_url . ,url)
+      (raw-content . ,content))))
+
+(define (make-new-comment key title comment)
+  (let ((sha1 (with-output-to-blob
+               (for-each
+                (match-lambda
+                  ((k . v)
+                   (unless (eq? k 'raw-content)
+                     (format #t "~a: ~a\n" k v))))
+                comment)
+               (display "\n")
+               (display (assq-ref comment 'raw-content))))
+        (message (format #f "comment on \"~a\" by ~a" title
+                         (assq-ref comment 'author))))
+    (git-update-ref
+     "refs/heads/master"
+     (lambda (master)
+       (git-commit-tree (munge-tree1 master
+                                     'create
+                                     (list key "comments")
+                                     (list sha1 sha1 'blob))
+                        master message #f))
+     5)))
 
 (define (delete-comment post id)
   (let ((key (post-key post))
@@ -174,3 +182,45 @@
                                                   `(,id))
                                      master message #f))
                   5)))
+
+(define (compute-legit-comments master-ref)
+  ;; sha1 -> #t
+  (define legit (make-hash-table))
+  (pk 'computing-legit)
+  (for-each
+   (match-lambda
+     ((post-name post-sha1 'tree)
+      (for-each
+       (match-lambda
+         ((comment-name comment-sha1 'blob)
+          (hash-set! legit comment-sha1 comment-name)))
+       (git-ls-tree (string-append post-sha1 ":comments") #f))))
+   (git-ls-tree master-ref #f))
+  (pk 'done legit))
+
+(define (compute-bogus-comments master-ref legit)
+  ;; sha1 -> #t
+  (define visited-trees (make-hash-table))
+  (define bogus (make-hash-table))
+  (pk 'computing-bogus)
+  (fold-commits
+   (lambda (rev commit _)
+     (pk 'computing-bogus rev)
+     (for-each
+      (match-lambda
+        ((post-name post-sha1 'tree)
+         (unless (hash-ref visited-trees post-sha1)
+           (hash-set! visited-trees post-sha1 #t)
+           (for-each
+            (match-lambda
+              ((comment-name comment-sha1 'blob)
+               (unless (or (hash-ref legit comment-sha1)
+                           (hash-ref bogus comment-sha1))
+                 (hash-set! bogus comment-sha1 comment-name)))
+              (_ #f))
+            (git-ls-tree (string-append post-sha1 ":comments") #f))))
+        (_ #f))
+      (git-ls-tree (assq-ref commit 'tree) #f)))
+   (assq-ref (parse-commit master-ref) 'parent)
+   #f)
+  bogus)

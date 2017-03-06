@@ -33,46 +33,48 @@
   #:use-module (tekuti post)
   #:use-module (tekuti tags)
   #:use-module (tekuti cache)
+  #:use-module (tekuti classifier)
   #:export (maybe-reindex read-index update-index))
 
+;; Additionally an index has an "index" field, indicating the commit
+;; that it was saved in, and a "master" field, indicating the commit
+;; that it indexes.
 (define index-specs
-  `((posts ,reindex-posts ,write-hash ,read-hash)
+  `((master #f ,write ,read)
+    (posts ,reindex-posts ,write-hash ,read-hash)
     (posts-by-date ,reindex-posts-by-date ,write ,read)
     (tags ,reindex-tags ,write-hash ,read-hash)
-    (cache ,(lambda _ (make-empty-cache)) ,(lambda (x) #f) ,(lambda () '()))))
+    (legit-comments ,reindex-legit-comments ,write-hash ,read-hash)
+    (bogus-comments ,reindex-bogus-comments ,write-hash ,read-hash)
+    (classifier ,reindex-classifier #f #f)
+    (cache ,(lambda _ (make-empty-cache)) #f #f)))
 
 (define (reindex oldindex master)
+  ;; Leave off "index" field.
   (with-time-debugging
-   (fold (lambda (pair index)
-           (acons (car pair) ((cadr pair) oldindex index)
-                  index))
+   (fold (lambda (spec index)
+           (match spec
+             ((key reindex write read)
+              (acons key (with-time-debugging (begin (pk key) (reindex oldindex index))) index))))
          (acons 'master master '())
-         index-specs)))
-
-(define (assoc-list-ref alist key n default)
-  (let ((l (assoc key alist)))
-    (if l (list-ref l n) default)))
-
-(define (index->blob key value)
-  (with-output-to-blob
-   ((assoc-list-ref index-specs key 2 write) value)))
-
-(define (blob->index name sha1)
-  (with-input-from-blob
-   sha1
-   ((assoc-list-ref index-specs (string->symbol name) 3 read))))
+         ;; Skip past "master" as we handle that one specially.
+         (match index-specs
+           ((('master . _) . specs) specs)))))
 
 (define (write-index index oldref)
   (let ((new (git-commit-tree
               (git-mktree
                (let lp ((index index))
-                 (cond
-                  ((null? index) '())
-                  ((eq? (caar index) 'index) (lp (cdr index)))
-                  (else (cons (list (caar index)
-                                    (index->blob (caar index) (cdar index))
-                                    'blob)
-                              (lp (cdr index)))))))
+                 (match index
+                   (() '())
+                   (((k . v) . index)
+                    (match (assq k index-specs)
+                      ((_ reindex write read)
+                       (if write
+                           (cons (list k (with-output-to-blob (write v)) 'blob)
+                                 (lp index))
+                           (lp index)))
+                      (_ (lp index)))))))
               oldref "reindex\n"
               (commit-utc-timestamp (assq-ref index 'master)))))
     (or (false-if-git-error
@@ -81,19 +83,26 @@
     new))
 
 (define (read-index)
+  (pk 'reading-index)
   (match (false-if-git-error (git-rev-parse "refs/heads/index"))
     (#f (maybe-reindex '()))
     (ref
      (let ((dents (git-ls-tree ref #f)))
-       (if (and-map (lambda (spec)
-                      (assoc (symbol->string (car spec)) dents))
-                    index-specs)
-           (acons 'index ref
-                  (map (lambda (dent)
-                         (cons (string->symbol (car dent))
-                               (blob->index (car dent) (cadr dent))))
-                       dents))
-           (maybe-reindex (acons 'index ref '())))))))
+       (fold (lambda (spec index)
+               (match spec
+                 ((key reindex write read)
+                  (pk 'read-index-key key)
+                  (acons key
+                         (cond
+                          ((and read (assoc (symbol->string key) dents))
+                           => (match-lambda
+                                ((_ sha1 'blob)
+                                 (with-input-from-blob sha1 (read)))))
+                          (else
+                           (reindex '() index)))
+                         index))))
+             `((index . ,ref))
+             index-specs)))))
 
 (define (maybe-reindex old-index)
   (let ((master (git-rev-parse "refs/heads/master")))

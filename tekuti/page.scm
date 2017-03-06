@@ -30,6 +30,7 @@
   #:use-module (tekuti git)
   #:use-module (tekuti post)
   #:use-module (tekuti comment)
+  #:use-module (tekuti classifier)
   #:use-module (web uri)
   #:use-module (web request)
   #:use-module (tekuti request)
@@ -208,13 +209,27 @@
     (cond
      ((post-from-key index (make-post-key year month day name))
       => (lambda (post)
-           (cond
-            ((bad-new-comment-post? data)
-             => (lambda (reason)
-                  (respond `((p "Bad post data: " ,(pk reason))))))
-            (else
-             (let ((comment (make-new-comment (post-key post) (post-title post)
-                                              data)))
+           (let ((comment (parse-new-comment data)))
+             (cond
+              ((bad-new-comment-post? data)
+               => (lambda (reason)
+                    (respond `((p "Bad post data: " ,(pk reason))))))
+              ((comment-is-bogus? index comment)
+               (respond `((p "Comment appears to be bogus; ignoring.")
+                          (p "I'm testing out a new automated bogus "
+                             "comment detector.  If you feel your comment "
+                             "was caught unfairly, tweet it to me or send "
+                             "it by email.  Or press back and reword it.")
+                          (p "If you are a spammer, note that I fixed "
+                             "the comment renderer to properly add "
+                             (tt "rel='external nofollow'") " on all "
+                             "links in comments.  Go take a look at any "
+                             "comment with a link to see for yourself.  "
+                             "Trying to linkbomb this site probably won't "
+                             "give you any link juice so it's not worth "
+                             "the trouble to either one of us :)"))))
+              (else
+               (make-new-comment (post-key post) (post-title post) comment)
                ;; nb: at this point, `post' is out-of-date
                (respond `((p "Comment posted, thanks."))
                         #:redirect (post-url post #:fragment "comments")
