@@ -59,9 +59,9 @@
 (define *server-impl-args*
   (lambda () `(#:host ,*private-host* #:port ,*private-port*)))
 
-(define-parsed-entity! 'agrave 224)
-(define-parsed-entity! 'laquo 171)
-(define-parsed-entity! 'mdash 8212)
-(define-parsed-entity! 'nbsp 160)
-(define-parsed-entity! 'raquo 187)
-(define-parsed-entity! 'uacute 250)
+(define-parsed-entity! 'agrave (string (integer->char 224)))
+(define-parsed-entity! 'laquo (string (integer->char 171)))
+(define-parsed-entity! 'mdash (string (integer->char 8212)))
+(define-parsed-entity! 'nbsp (string (integer->char 160)))
+(define-parsed-entity! 'raquo (string (integer->char 187)))
+(define-parsed-entity! 'uacute (string (integer->char 250)))
