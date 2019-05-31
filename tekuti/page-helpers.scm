@@ -187,8 +187,17 @@ present."
       (cond
        ((raw-text-element? tag)
         (let ((body (string-concatenate body)))
-          (when (string-contains body "</")
-            (error "raw text element body contains </" tag attrs body))
+          (let ((needle (string-append "</" (symbol->string tag))))
+            (let lp ((idx 0))
+              (let ((idx (string-contains-ci body needle idx)))
+                (when idx
+                  (let ((idx (+ idx (string-length needle))))
+                    (let ((ch (and (< idx (string-length body))
+                                   (string-ref body idx))))
+                      (when (and ch (string-index "\t\n\f\r >/" ch))
+                        (error "raw text element body contains end tag"
+                               needle body)))
+                    (lp idx))))))
           (display body port)))
        ((escapable-raw-text-element? tag)
         (for-each
