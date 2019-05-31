@@ -1,5 +1,5 @@
 ;; Tekuti
-;; Copyright (C) 2008, 2010, 2012, 2014 Andy Wingo <wingo at pobox dot com>
+;; Copyright (C) 2008, 2010, 2012, 2014, 2019 Andy Wingo <wingo at pobox dot com>
 
 ;; This program is free software; you can redistribute it and/or
 ;; modify it under the terms of the GNU General Public License as
@@ -25,6 +25,7 @@
 ;;; Code:
 
 (define-module (tekuti page-helpers)
+  #:use-module (ice-9 match)
   #:use-module (sxml simple)
   #:use-module (web uri)
   #:use-module (web http)
@@ -49,10 +50,7 @@
             find-posts-matching
             atom-header atom-entry))
 
-(define xhtml-doctype
-  (string-append
-   "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\" "
-   "\"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\">\n"))
+(define html-doctype "<!doctype html>\n")
 
 (define-syntax build-headers
   (syntax-rules ()
@@ -87,16 +85,158 @@
     (ensure-uri-reference (relurl x)))
    (else (error "can't turn into a uri" x))))
 
+(define-syntax-rule (define-tag-set pred tag ...)
+  (define pred
+    (let ((set (make-hash-table)))
+      (hashq-set! set 'tag #t) ...
+      (lambda (t) (hashq-ref set t)))))
+
+(define-tag-set void-element?
+  area base br col embed hr img input link meta param source track wbr)
+(define-tag-set template-element?
+  template)
+(define-tag-set raw-text-element?
+  script style)
+(define-tag-set escapable-raw-text-element?
+  textarea title)
+(define (foreign-element? tag)
+  (string-index (symbol->string tag) #\:))
+;; Otherwise it's a normal element.
+
+(define (make-char-quotator char-encoding)
+  (let ((bad-chars (list->char-set (map car char-encoding))))
+
+    ;; Check to see if str contains one of the characters in charset,
+    ;; from the position i onward. If so, return that character's index.
+    ;; otherwise, return #f
+    (define (index-cset str i charset)
+      (string-index str charset i))
+
+    ;; The body of the function
+    (lambda (str port)
+      (let ((bad-pos (index-cset str 0 bad-chars)))
+        (if (not bad-pos)
+            (display str port)          ; str had all good chars
+            (let loop ((from 0) (to bad-pos))
+              (cond
+               ((>= from (string-length str)) *unspecified*)
+               ((not to)
+                (display (substring str from (string-length str)) port))
+               (else
+                (let ((quoted-char
+                       (cdr (assv (string-ref str to) char-encoding)))
+                      (new-to
+                       (index-cset str (+ 1 to) bad-chars)))
+                  (if (< from to)
+                      (display (substring str from to) port))
+                  (display quoted-char port)
+                  (loop (1+ to) new-to))))))))))
+
+(define (attribute-value-empty? value)
+  (string-null? value))
+
+(define attribute-value-needs-quotes-chars
+  (char-set-union (string->char-set "\"'=<>`") char-set:whitespace))
+(define (attribute-value-needs-quotes? value)
+  (or (string-null? value)
+      (string-index value attribute-value-needs-quotes-chars)))
+
+(define print-attribute-value/quoted
+  (make-char-quotator
+   '((#\< . "&lt;") (#\> . "&gt;") (#\& . "&amp;") (#\" . "&quot;"))))
+
+(define print-text/quoted
+  (make-char-quotator
+   '((#\< . "&lt;") (#\> . "&gt;") (#\& . "&amp;"))))
+
+(define* (shtml->html tree #:optional (port (current-output-port)))
+  "Serialize the shtml tree @var{tree} as HTML. The output will be written
+to the current output port, unless the optional argument @var{port} is
+present."
+  (define (attribute->html attr value)
+    (display attr port)
+    (unless (attribute-value-empty? value)
+      (display #\= port)
+      (cond
+       ((attribute-value-needs-quotes? value)
+        (display #\" port)
+        (print-attribute-value/quoted value port)
+        (display #\" port))
+       (else
+        (display value port)))))
+
+  (define (element->html tag attrs body)
+    (display #\< port)
+    (display tag port)
+    (let lp ((attrs attrs))
+      (match attrs
+        (() #t)
+        ((((? symbol? attr) val) . attrs)
+         (display #\space port)
+         (attribute->html attr val)
+         (lp attrs))))
+
+    (cond
+     ((and (null? body) (foreign-element? tag))
+      (display " />" port))
+     ((void-element? tag)
+      (unless (null? body) (error "unexpected body for void element"))
+      (display #\> port))
+     (else
+      (display #\> port)
+      (cond
+       ((raw-text-element? tag)
+        (let ((body (string-concatenate body)))
+          (when (string-contains body "</")
+            (error "raw text element body contains </" tag attrs body))
+          (display body port)))
+       ((escapable-raw-text-element? tag)
+        (for-each
+         (lambda (str)
+           (unless (string? str)
+             (error "bad escapable raw text content" str))
+           (print-text/quoted str port))
+         body))
+       (else
+        (for-each ->html body)))
+      (display "</" port)
+      (display tag port)
+      (display ">" port))))
+
+  (define (->html tree)
+    (match tree
+      (((? symbol? tag) ('@ . attrs) . body)
+       (element->html tag attrs body))
+      (((? symbol? tag) . body)
+       (element->html tag '() body))
+      ((_ . _)
+       (error "nodelists unsupported" tree))
+      ((or #f #t ()) #f)
+      ((? string?)
+       (print-text/quoted tree port))
+      ((? procedure?)
+       (with-output-to-port port tree))
+      (tree
+       (error "unexpected shtml" tree))))
+
+  (match tree
+    (('html . _)
+     (->html tree))))
+
 (define* (respond #:optional body #:key
                   redirect
                   (status (if redirect 302 200))
                   (title *title*)
                   last-modified
                   etag
-                  (doctype xhtml-doctype)
+                  (doctype html-doctype)
                   (content-type-params '((charset . "utf-8")))
                   (content-type 'text/html)
                   (extra-headers '())
+                  (serialize
+                   (match content-type
+                     ('text/html shtml->html)
+                     ('application/atom+xml sxml->xml)))
                   (sxml (and body (templatize #:title title #:body body))))
   (values (build-response
            #:code status
@@ -110,7 +250,7 @@
           (and sxml
                (lambda (port)
                  (if doctype (display doctype port))
-                 (sxml->xml sxml port)))))
+                 (serialize sxml port)))))
 
 (define (unparse-www-form-urlencoded alist)
   (string-join (map (lambda (pair)
