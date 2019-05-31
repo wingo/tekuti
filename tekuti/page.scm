@@ -89,7 +89,7 @@
                                    (ul ,@(post-links 5)))
                                (li (h2 "changes" ,(rellink '("admin" "changes")
                                                            ">>"))
-                                   (ul ,(recent-changes 5)))))
+                                   (ul ,@(recent-changes 5)))))
                 (h2 "new post")
                 ,(post-editing-form #f))))))
 
