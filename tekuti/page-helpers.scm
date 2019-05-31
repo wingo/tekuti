@@ -216,6 +216,8 @@ present."
        (print-text/quoted tree port))
       ((? procedure?)
        (with-output-to-port port tree))
+      ((? number?)
+       (display tree port))
       (tree
        (error "unexpected shtml" tree))))
 
