@@ -1,5 +1,5 @@
 ;; Tekuti
-;; Copyright (C) 2008, 2010, 2011, 2012 Andy Wingo <wingo at pobox dot com>
+;; Copyright (C) 2008, 2010, 2011, 2012, 2019 Andy Wingo <wingo at pobox dot com>
 
 ;; This program is free software; you can redistribute it and/or
 ;; modify it under the terms of the GNU General Public License as
@@ -35,7 +35,7 @@
   #:use-module (web request)
   #:use-module (tekuti request)
   #:use-module (tekuti page-helpers)
-  #:use-module ((srfi srfi-1) #:select (fold))
+  #:use-module ((srfi srfi-1) #:select (fold append-map))
   #:use-module (srfi srfi-34)
   #:use-module (srfi srfi-19)
   #:export (page-admin
@@ -187,9 +187,9 @@
 
 (define (page-index request body index)
   (respond `(,(main-sidebar request index)
-             ,@(map (lambda (post)
-                      (show-post post #f))
-                    (latest-posts index #:limit 10)))
+             . ,(append-map (lambda (post)
+                              (show-post post #f))
+                            (latest-posts index #:limit 10)))
            #:etag (assq-ref index 'master)))
 
 (define (page-show-post request body index year month day post)
@@ -198,7 +198,7 @@
                    #:allow-draft? #t)
     => (lambda (post)
          (respond `(,(post-sidebar post index)
-                    ,(show-post post #t))
+                    ,@(show-post post #t))
                   #:title (string-append (post-title post) " -- " *title*)
                   #:etag (assq-ref index 'master))))
    (else

@@ -360,7 +360,7 @@ present."
                     `((h2 "comments")
                       (ol (@ (class "commentlist")) ,@l))))
             (h2 "preview")
-            ,(show-post post #f))
+            ,@(show-post post #f))
           '())))
 
 (define (sidebar-ul body)
