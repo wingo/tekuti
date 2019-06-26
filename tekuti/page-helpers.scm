@@ -38,6 +38,7 @@
   #:use-module (tekuti comment)
   #:use-module (tekuti request)
   #:use-module (tekuti template)
+  #:use-module ((srfi srfi-1) #:select (append-map))
   #:use-module (srfi srfi-19)
   #:export (respond
             relurl rellink
@@ -417,7 +418,7 @@ present."
                  (value "Submit Comment"))))))
 
 (define (comments-sxml-content-edit post)
-  (map
+  (append-map
    (lambda (comment)
      (let ((id (assq-ref comment 'key)))
        `(,(comment-sxml-content comment)
