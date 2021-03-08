@@ -123,7 +123,7 @@
        (cond
         ((post-comments-closed-timestamp post)
          => (lambda (at-timestamp)
-              (< at-timestamp (time-second (current-time)))))
+              (< (time-second (current-time)) at-timestamp)))
         (else #t))))
 
 (define (post-comments-closed-timestamp post)
