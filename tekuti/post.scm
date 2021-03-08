@@ -163,7 +163,9 @@
   (let ((metadata (with-output-to-blob
                    (for-each
                     (lambda (k)
-                      (format #t "~a: ~a\n" k (assq-ref parsed k)))
+                      (cond
+                       ((assq-ref parsed k)
+                        => (lambda (v) (format #t "~a: ~a\n" k v)))))
                     '(timestamp tags status title name comment_status
                                 comments-closed-timestamp))))
         (content (with-output-to-blob (display (assq-ref parsed 'body))))
