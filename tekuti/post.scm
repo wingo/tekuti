@@ -1,5 +1,5 @@
 ;; Tekuti
-;; Copyright (C) 2008, 2010, 2011, 2012, 2014 Andy Wingo <wingo at pobox dot com>
+;; Copyright (C) 2008, 2010, 2011, 2012, 2014, 2021 Andy Wingo <wingo at pobox dot com>
 
 ;; This program is free software; you can redistribute it and/or
 ;; modify it under the terms of the GNU General Public License as
@@ -39,7 +39,8 @@
 
             post-tags post-timestamp post-key
             post-public? post-draft? post-private?
-            post-comments-open? post-comments
+            post-comments-open? post-comments-closed-timestamp
+            post-comments
             post-sxml-content post-readable-date post-n-comments
             post-raw-content
             post-title
@@ -57,7 +58,11 @@
 (define *post-spec*
   `((timestamp . ,string->number)
     (tags . ,(lambda (v) (string-split/trimming v #\,)))
-    (title . ,identity)))
+    (title . ,identity)
+    (comments-closed-timestamp ,(lambda (str)
+                                  (if (string-null? str)
+                                      #f
+                                      string->number)))))
 
 (define (post-from-tree encoded-name sha1)
   (append `((key . ,encoded-name)
@@ -114,7 +119,15 @@
   (assq-ref post 'title))
 
 (define (post-comments-open? post)
-  (equal? (assq-ref post 'comment_status) "open"))
+  (and (equal? (assq-ref post 'comment_status) "open")
+       (cond
+        ((post-comments-closed-timestamp post)
+         => (lambda (at-timestamp)
+              (< at-timestamp (time-second (current-time)))))
+        (else #t))))
+
+(define (post-comments-closed-timestamp post)
+  (assq-ref post 'comments-closed-timestamp))
 
 (define (post-raw-content post)
   (git "show" (string-append (assq-ref post 'sha1) ":content")))
@@ -151,7 +164,8 @@
                    (for-each
                     (lambda (k)
                       (format #t "~a: ~a\n" k (assq-ref parsed k)))
-                    '(timestamp tags status title name comment_status))))
+                    '(timestamp tags status title name comment_status
+                                comments-closed-timestamp))))
         (content (with-output-to-blob (display (assq-ref parsed 'body))))
         (key (assq-ref parsed 'key))
         (message (format #f "~a: \"~a\""
@@ -193,16 +207,24 @@
         (tags (assoc-ref post-data "tags"))
         (status (assoc-ref post-data "status"))
         (comments-open? (assoc-ref post-data "comments"))
-        (date-str (assoc-ref post-data "date")))
-    (let ((timestamp (if (string-null? date-str)
-                         (time-second (current-time))
-                         (rfc822-date->timestamp date-str)))
-          (name (title->name title)))
+        (date-str (assoc-ref post-data "date"))
+        (comments-closed-date-str (assoc-ref post-data "comments-closed-date")))
+    (let* ((timestamp (if (string-null? date-str)
+                          (time-second (current-time))
+                          (rfc822-date->timestamp date-str)))
+           (comments-closed-timestamp
+            (if (string-null? comments-closed-date-str)
+                (if (post-public? (acons 'status status '()))
+                    (+ *comments-open-window* timestamp)
+                    #f)
+                (rfc822-date->timestamp comments-closed-date-str)))
+           (name (title->name title)))
       `((title . ,title)
         (body . ,body)
         (tags . ,tags)
         (status . ,status)
         (comment_status . ,(if comments-open? "open" "closed"))
+        (comments-closed-timestamp . ,comments-closed-timestamp)
         (timestamp . ,timestamp)
         (name . ,name)
         (key . ,(string-downcase

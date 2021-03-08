@@ -1,5 +1,5 @@
 ;; Tekuti
-;; Copyright (C) 2008, 2010, 2012, 2014, 2019 Andy Wingo <wingo at pobox dot com>
+;; Copyright (C) 2008, 2010, 2012, 2014, 2019, 2021 Andy Wingo <wingo at pobox dot com>
 
 ;; This program is free software; you can redistribute it and/or
 ;; modify it under the terms of the GNU General Public License as
@@ -337,6 +337,15 @@ present."
                        ,@(if (or (not post) (post-comments-open? post))
                              `((checked "checked")) '())))
              (label (@ (for "comments")) " comments open?"))
+          (p (input (@ (name "comments-closed-date") (type "text")
+                       (value ,(or (and=> (and=> post
+                                                 post-comments-closed-timestamp)
+                                          timestamp->rfc822-date)
+                                   ""))))
+             (label (@ (for "comments-closed-date"))
+                    " <- close comments on date (empty == in "
+                    ,(floor/ *comments-open-window* (* 24 60 60))
+                    " days)"))
           (div (textarea (@ (name "body") (rows "20") (cols "60"))
                          ,(if post (post-raw-content post) "")))
           (p (label (input (@ (type "radio") (name "status") (value "private")

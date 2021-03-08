@@ -1,5 +1,5 @@
 ;; Tekuti
-;; Copyright (C) 2008, 2010, 2011, 2012, 2019 Andy Wingo <wingo at pobox dot com>
+;; Copyright (C) 2008, 2010, 2011, 2012, 2019, 2021 Andy Wingo <wingo at pobox dot com>
 
 ;; This program is free software; you can redistribute it and/or
 ;; modify it under the terms of the GNU General Public License as
@@ -211,6 +211,8 @@
       => (lambda (post)
            (let ((comment (parse-new-comment data)))
              (cond
+              ((not (post-comments-open? post))
+               (respond `((p "Comments on this post are closed."))))
               ((bad-new-comment-post? data)
                => (lambda (reason)
                     (respond `((p "Bad post data: " ,(pk reason))))))
