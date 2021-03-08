@@ -62,7 +62,7 @@
     (comments-closed-timestamp . ,(lambda (str)
                                     (if (string-null? str)
                                         #f
-                                        string->number)))))
+                                        (string->number str))))))
 
 (define (post-from-tree encoded-name sha1)
   (append `((key . ,encoded-name)
