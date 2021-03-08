@@ -59,10 +59,10 @@
   `((timestamp . ,string->number)
     (tags . ,(lambda (v) (string-split/trimming v #\,)))
     (title . ,identity)
-    (comments-closed-timestamp ,(lambda (str)
-                                  (if (string-null? str)
-                                      #f
-                                      string->number)))))
+    (comments-closed-timestamp . ,(lambda (str)
+                                    (if (string-null? str)
+                                        #f
+                                        string->number)))))
 
 (define (post-from-tree encoded-name sha1)
   (append `((key . ,encoded-name)
