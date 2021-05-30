@@ -114,16 +114,22 @@
      (lambda (feature bogus-count)
        (let ((legit-count (hash-ref legit-features feature 0)))
          (hash-set! log-bogosities feature
-                    (log (/ (/ (+ bogus-count 0.001) total-bogus-features)
-                            (/ (+ legit-count 0.001) total-legit-features))))))
+                    (if (and (> total-bogus-features 0)
+                             (> total-legit-features 0))
+                        (log (/ (/ (+ bogus-count 0.001) total-bogus-features)
+                                (/ (+ legit-count 0.001) total-legit-features)))
+                        0))))
      bogus-features)
     (hash-for-each
      (lambda (feature legit-count)
        (let ((bogus-count (hash-ref bogus-features feature)))
          (unless bogus-count
            (hash-set! log-bogosities feature
-                      (log (/ (/ 0.01 total-bogus-features)
-                              (/ (+ legit-count 0.01) total-legit-features)))))))
+                      (if (and (> total-bogus-features 0)
+                               (> total-legit-features 0))
+                          (log (/ (/ 0.01 total-bogus-features)
+                                  (/ (+ legit-count 0.01) total-legit-features)))
+                          0)))))
      legit-features)
     log-bogosities))
 
@@ -138,8 +144,11 @@
        (let ((bogus-count (hash-ref bogus-features feature 0))
              (legit-count (hash-ref legit-features feature 0)))
          (hash-set! log-bogosities feature
-                    (log (/ (/ (+ bogus-count 0.001) total-bogus-features)
-                            (/ (+ legit-count 0.001) total-legit-features))))))
+                    (if (and  (> total-bogus-features 0)
+                              (> total-legit-features 0))
+                        (log (/ (/ (+ bogus-count 0.001) total-bogus-features)
+                                (/ (+ legit-count 0.001) total-legit-features)))
+                        0))))
      changed-features)))
 
 (define (compute-bogus-probability comment log-bogosities bogus-prior
@@ -250,7 +259,9 @@
   (with-time-debugging
    (let* ((legit-count (hash-count (const #t) legit-comments))
           (bogus-count (hash-count (const #t) bogus-comments))
-          (legit-prior (/ legit-count (+ legit-count bogus-count 0.0)))
+          (legit-prior (if (> legit-count 0)
+                           (/ legit-count (+ legit-count bogus-count 0.0))
+                           0))
           (legit-features (count-features legit-comments))
           (bogus-features (count-features bogus-comments))
           (bogosities (compute-log-bogosities legit-features bogus-features)))
