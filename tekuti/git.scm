@@ -334,7 +334,7 @@
                    (cons (string->symbol k) v))))))
 
 (define (fold-commits f rev seed)
-  (let lp ((rev (git-rev-parse rev)) (seed seed))
+  (let lp ((rev (and rev (git-rev-parse rev))) (seed seed))
     (if rev
         (let ((commit (parse-commit rev)))
           (lp (assq-ref commit 'parent)
