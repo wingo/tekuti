@@ -135,11 +135,17 @@
         (total-legit-features (feature-count legit-features)))
     (hash-for-each
      (lambda (feature _)
-       (let ((bogus-count (hash-ref bogus-features feature 0))
+       (let ((bogus-count (hash-ref bogus-features feature))
              (legit-count (hash-ref legit-features feature 0)))
-         (hash-set! log-bogosities feature
-                    (log (/ (/ (+ bogus-count 0.001) total-bogus-features)
-                            (/ (+ legit-count 0.001) total-legit-features))))))
+	 (cond
+	  (bogus-count
+           (hash-set! log-bogosities feature
+                      (log (/ (/ (+ bogus-count 0.001) total-bogus-features)
+			      (/ (+ legit-count 0.001) total-legit-features)))))
+          (else
+	   (hash-set! log-bogosities feature
+                      (log (/ (/ 0.01 total-bogus-features)
+                              (/ (+ legit-count 0.01) total-legit-features))))))))
      changed-features)))
 
 (define (compute-bogus-probability comment log-bogosities bogus-prior

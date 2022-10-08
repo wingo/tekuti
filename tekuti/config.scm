@@ -27,6 +27,7 @@
 (define-module (tekuti config)
   #:use-module (tekuti util)
   #:use-module ((sxml ssax) #:select (define-parsed-entity!))
+  #:declarative? #f
   #:export (*public-scheme* *public-host* *public-port* *public-path-base*
             *private-host* *private-port* *private-path-base*
             *git-dir* *git* *debug* *admin-user* *admin-pass*
