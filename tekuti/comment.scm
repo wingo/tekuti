@@ -88,7 +88,7 @@
               (a (@ (href ,(string-append "#" (assq-ref comment 'key))))
                  ,(comment-readable-date comment)))
        ,(neutralize-links
-         (let ((format (or (assq-ref comment 'format) 'marxdown)))
+         (let ((format (or (assq-ref comment 'format) 'wordpress)))
            ((case format
               ((wordpress) wordpress->sxml)
               ((marxdown) marxdown->sxml)
@@ -148,6 +148,7 @@
       (author . ,(de-newline author))
       (author_email . ,email)
       (author_url . ,url)
+      (format . marxdown)
       (raw-content . ,content))))
 
 (define (make-new-comment key title comment)
