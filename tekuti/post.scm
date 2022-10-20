@@ -168,7 +168,7 @@
                        ((assq-ref parsed k)
                         => (lambda (v) (format #t "~a: ~a\n" k v)))))
                     '(timestamp tags status title name comment_status
-                                comments-closed-timestamp))))
+                                comments-closed-timestamp format))))
         (content (with-output-to-blob (display (assq-ref parsed 'body))))
         (key (assq-ref parsed 'key))
         (message (format #f "~a: \"~a\""
@@ -230,6 +230,7 @@
         (comments-closed-timestamp . ,comments-closed-timestamp)
         (timestamp . ,timestamp)
         (name . ,name)
+        (format . marxdown)
         (key . ,(string-downcase
                  (uri-encode
                   (string-append (date->string (timestamp->date timestamp)
