@@ -1,5 +1,5 @@
 ;; Tekuti
-;; Copyright (C) 2008, 2010, 2011, 2012 Andy Wingo <wingo at pobox dot com>
+;; Copyright (C) 2008, 2010, 2011, 2012, 2022 Andy Wingo <wingo at pobox dot com>
 
 ;; This program is free software; you can redistribute it and/or
 ;; modify it under the terms of the GNU General Public License as
@@ -27,10 +27,11 @@
 (define-module (tekuti filters)
   #:use-module (sxml simple)
   #:use-module (sxml transform)
+  #:use-module (tekuti marxdown)
   #:use-module (tekuti match-bind)
   #:use-module (tekuti util)
-  #:export (wordpress->sxml
-            *allowed-tags* bad-user-submitted-xhtml?))
+  #:export (wordpress->sxml marxdown->sxml
+            *allowed-tags* bad-user-submitted-marxdown?))
 
 (define blocks '(table thead tfoot caption colgroup tbody tr td th div
                  dl dd dt ul ol li pre select form map area blockquote
@@ -90,6 +91,9 @@
        (*text* . ,(lambda (tag text)
                     text))))))
 
+(define (marxdown->sxml text)
+  (smarxdown->shtml (call-with-input-string text marxdown->smarxdown)))
+
 (define *allowed-tags*
   `((a (href . ,urlish?) title)
     (abbr title)
@@ -140,13 +144,18 @@
   `((div ,(compile-sxslt-rules *allowed-tags*)
          . ,(lambda body body))))
 
-(define (bad-user-submitted-xhtml? x)
+(define (bad-user-submitted-marxdown? x)
   (catch #t
          (lambda ()
-           (pre-post-order (wordpress->sxml x) *valid-xhtml-rules*)
+           (pre-post-order (marxdown->sxml x) *valid-xhtml-rules*)
            #f)
          (lambda (key . args)
-           `(div (p (b "Invalid XHTML"))
+           `(div (p (b "Invalid Marxdown"))
+                 (p "The input grammar is essentially Markdown.  However "
+                    "there are some differences, notably that e.g. *emph* "
+                    "blocks need to be properly closed and that any "
+                    "embedded HTML needs to be well-formed XHTML.")
+                 (p "Further information:")
                  ,(case key
                     ((parser-error)
                      `(div
@@ -168,6 +177,5 @@
                     ((bad-attr-value)
                      `(p "XHTML attribute has bad value: " ,(car args)))
                     (else
-                     (pk key args)
-                     `(p "Jesus knows why, and so do you")))))))
+                     `(p "Hey not real knows why, and so do you")))))))
 

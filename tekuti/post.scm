@@ -1,5 +1,5 @@
 ;; Tekuti
-;; Copyright (C) 2008, 2010, 2011, 2012, 2014, 2021 Andy Wingo <wingo at pobox dot com>
+;; Copyright (C) 2008, 2010, 2011, 2012, 2014, 2021, 2022 Andy Wingo <wingo at pobox dot com>
 
 ;; This program is free software; you can redistribute it and/or
 ;; modify it under the terms of the GNU General Public License as
@@ -133,15 +133,16 @@
   (git "show" (string-append (assq-ref post 'sha1) ":content")))
 
 (define (post-sxml-content post)
-  (let ((format (or (assq-ref post 'format) 'wordpress))
+  (let ((format (or (assq-ref post 'format) 'marxdown))
         (raw (post-raw-content post)))
     (catch #t
            (lambda ()
              (case format
                ((wordpress) (wordpress->sxml raw))
+               ((marxdown) (marxdown->sxml raw))
                (else `(pre ,raw))))
            (lambda args
-             `(pre ,(bad-user-submitted-xhtml? raw))))))
+             `(pre ,(bad-user-submitted-marxdown? raw))))))
 
 (define (post-readable-date post)
   (let ((date (time-utc->date

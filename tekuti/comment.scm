@@ -1,5 +1,5 @@
 ;; Tekuti
-;; Copyright (C) 2008, 2010, 2012 Andy Wingo <wingo at pobox dot com>
+;; Copyright (C) 2008, 2010, 2012, 2022 Andy Wingo <wingo at pobox dot com>
 
 ;; This program is free software; you can redistribute it and/or
 ;; modify it under the terms of the GNU General Public License as
@@ -88,9 +88,10 @@
               (a (@ (href ,(string-append "#" (assq-ref comment 'key))))
                  ,(comment-readable-date comment)))
        ,(neutralize-links
-         (let ((format (or (assq-ref comment 'format) 'wordpress)))
+         (let ((format (or (assq-ref comment 'format) 'marxdown)))
            ((case format
               ((wordpress) wordpress->sxml)
+              ((marxdown) marxdown->sxml)
               (else (lambda (text) `(pre ,text))))
             (comment-raw-content comment))))))
 
@@ -119,7 +120,7 @@
   `(("author" ,(lambda (x) #f))
     ("email" ,bad-email?)
     ("url" ,bad-url?)
-    ("comment" ,bad-user-submitted-xhtml?)
+    ("comment" ,bad-user-submitted-marxdown?)
     ("x" ,bad-number?)
     ("submit" ,(lambda (x) #f))))
 

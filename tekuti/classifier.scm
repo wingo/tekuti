@@ -1,5 +1,5 @@
 ;; Tekuti
-;; Copyright (C) 2008, 2010, 2012 Andy Wingo <wingo at pobox dot com>
+;; Copyright (C) 2008, 2010, 2012, 2022 Andy Wingo <wingo at pobox dot com>
 
 ;; This program is free software; you can redistribute it and/or
 ;; modify it under the terms of the GNU General Public License as
@@ -56,11 +56,11 @@
      (author ,(assq-ref comment 'author))
      (email ,(assq-ref comment 'author_email))
      (url ,(assq-ref comment 'author_url))
-     ,(let ((format (or (assq-ref comment 'format) 'wordpress))
+     ,(let ((format (or (assq-ref comment 'format) 'marxdown))
             (raw (assq-ref comment 'raw-content)))
         (or (case format
               ((wordpress) (false-if-exception (wordpress->sxml raw)))
-
+              ((marxdown) (false-if-exception (marxdown->sxml raw)))
               (else `(pre ,raw)))
             `(pre ,raw))))))
 
