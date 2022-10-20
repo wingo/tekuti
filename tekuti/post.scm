@@ -59,6 +59,7 @@
   `((timestamp . ,string->number)
     (tags . ,(lambda (v) (string-split/trimming v #\,)))
     (title . ,identity)
+    (format . ,string->symbol)
     (comments-closed-timestamp . ,(lambda (str)
                                     (if (string-null? str)
                                         #f

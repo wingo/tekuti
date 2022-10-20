@@ -41,7 +41,8 @@
             compute-legit-comments compute-bogus-comments))
 
 (define *comment-spec*
-  `((timestamp . ,string->number)))
+  `((timestamp . ,string->number)
+    (format . ,string->symbol)))
 
 (define (blob->comment encoded-name sha1)
   (let ((blob (git "show" sha1)))
