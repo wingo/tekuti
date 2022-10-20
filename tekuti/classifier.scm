@@ -56,7 +56,7 @@
      (author ,(assq-ref comment 'author))
      (email ,(assq-ref comment 'author_email))
      (url ,(assq-ref comment 'author_url))
-     ,(let ((format (or (assq-ref comment 'format) 'marxdown))
+     ,(let ((format (or (assq-ref comment 'format) 'wordpress))
             (raw (assq-ref comment 'raw-content)))
         (or (case format
               ((wordpress) (false-if-exception (wordpress->sxml raw)))
