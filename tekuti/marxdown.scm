@@ -92,7 +92,7 @@
             ,@(match attributes
                 (() '())
                 (((attr . value) ...)
-                 `((@ ,(map list attr value)))))
+                 `((@ . ,(map list attr value)))))
             . ,(reverse seed))
           parent-seed))
   (define (ftext string1 string2 seed)
