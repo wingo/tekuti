@@ -10,6 +10,7 @@ SOURCES =					\
 	tekuti/filters.scm			\
 	tekuti/git.scm				\
 	tekuti/index.scm			\
+	tekuti/marxdown.scm			\
 	tekuti/match-bind.scm			\
 	tekuti/mod-lisp.scm			\
 	tekuti/page-helpers.scm			\
