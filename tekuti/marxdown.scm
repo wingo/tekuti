@@ -605,14 +605,14 @@
       (('inline-xml xml) (handle-inline-xml xml))
       (('code . body) exp)
       (('emph . body) `(emph . ,(map transform-inline body)))
-      (('strong . body) `(string . ,(map transform-inline body)))
+      (('strong . body) `(strong . ,(map transform-inline body)))
       (('link dest . body) `(a (@ (href ,dest)) . ,(map transform-inline body)))
       ((? string? str) str)))
   (define (transform-block exp)
     (match exp
       (('block-xml xml) (handle-block-xml xml))
       (('para . body) `(p . ,(map transform-inline body)))
-      (('blockquote . body) `(blockquote . (map transform-block body)))
+      (('blockquote . body) `(blockquote . ,(map transform-block body)))
       (('list-item . body) (error "fixme"))
       (('pre #f . body) `(pre . ,body))
       (('pre info . body) `(pre (@ (class ,(string-append "pre-" info)))
@@ -628,4 +628,4 @@
          `(,tag . ,(map transform-inline body))))))
   (match exp
     (('top exp ...)
-     `(top . ,(map transform-block exp)))))
+     `(div . ,(map transform-block exp)))))
