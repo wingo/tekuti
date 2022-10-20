@@ -603,9 +603,9 @@
   (define (transform-inline exp)
     (match exp
       (('inline-xml xml) (handle-inline-xml xml))
-      (('code . body) exp)
-      (('emph . body) `(emph . ,(map transform-inline body)))
-      (('strong . body) `(strong . ,(map transform-inline body)))
+      (('code . body) `(tt . ,body))
+      (('emph . body) `(i . ,(map transform-inline body)))
+      (('strong . body) `(b . ,(map transform-inline body)))
       (('link dest . body) `(a (@ (href ,dest)) . ,(map transform-inline body)))
       ((? string? str) str)))
   (define (transform-block exp)
