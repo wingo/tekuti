@@ -133,7 +133,7 @@
   (git "show" (string-append (assq-ref post 'sha1) ":content")))
 
 (define (post-sxml-content post)
-  (let ((format (or (assq-ref post 'format) 'marxdown))
+  (let ((format (or (assq-ref post 'format) 'wordpress))
         (raw (post-raw-content post)))
     (catch #t
            (lambda ()
