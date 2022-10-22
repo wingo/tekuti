@@ -213,6 +213,8 @@
           (#\newline
            ;; Sure.  Trailing whitespace can be any indent.
            (kt))
+          (#\return
+           (lp n))
           (ch
            (unless (eof-object? ch) (unget1 ch))
            (kf)))))))
@@ -347,12 +349,14 @@
     (let lp ((chars '()))
       (match (next-not-eof "backticks")
         (#\` (continue `(code ,(reverse-list->string chars))))
+        (#\return (lp chars))
         (#\newline
          (consume-indent
           indent
           (lambda ()
             (match (next-not-eof "code")
-              (#\newline (error "end of block while reading code"))
+              ((or #\return #\newline)
+               (error "end of block while reading code"))
               (ch (unget1 ch) (lp (cons #\space chars)))))
           (lambda () (error "end of block while reading code"))))
         (ch (lp (cons ch chars))))))
@@ -375,6 +379,7 @@
              (lp elts (cons elt out))))))
       (match (next)
         ((? eof-object?) (finish on-block-end))
+        (#\return (lp elts))
         (#\newline
          (consume-indent
           indent
@@ -403,7 +408,9 @@
                              (match link
                                (('link dest . alt)
                                 (continue `(image ,dest . ,alt)))))))
-               (ch (lp (cons* ch #\! elts)))))
+               (ch
+                (unget1 ch)
+                (lp (cons #\! elts)))))
         (ch (lp (cons ch elts))))))
 
   (define (read-para indent kup knext)
@@ -413,6 +420,7 @@
                              (knext (cons para nodelist))))))
     (define (done? ch)
       (match ch
+        (#\return (done? (next)))
         (#\newline
          (let ((ch (next)))
            (match ch
@@ -446,11 +454,9 @@
                     (append marker-outer
                             (list (+ marker-inner marker-size outer))
                             inner)))
-               (pk 'hey marker marker-indent marker-size indent body-indent ch)
                (read-indented-block
                 ch marker-indent body-indent
                 (lambda (elt ch indent)
-                  (pk ch marker-indent indent elt)
                   (read-indented-block ch marker-indent indent kup
                                        (lambda (nodelist)
                                          (knext (cons elt nodelist)))))
@@ -480,6 +486,7 @@
             (kblock
              (lambda (indent kup knext)
                (read-heading level (make-continue indent kup knext)))))
+           (#\return (lp level))
            (#\newline
             (kblock
              (lambda (indent kup knext)
@@ -552,6 +559,8 @@
               (match (parse-one-xml-element port)
                 (#f (read-block-list indent kup knext))
                 (elt ((make-continue indent kup knext) `(block-xml ,elt))))))))
+      (#\return
+       (read-block-type (next-not-eof "newline") in-text? kblock ktext))
       (#\newline
        ;; fixme: record loose li
        (kblock read-block-list))
