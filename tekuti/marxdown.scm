@@ -212,6 +212,7 @@
               (else (kt)))))
           (#\newline
            ;; Sure.  Trailing whitespace can be any indent.
+           (unget1 #\newline)
            (kt))
           (#\return
            (lp n))
@@ -377,6 +378,16 @@
                   (lp elts (cons (list->string chars) out))))))
             ((elt . elts)
              (lp elts (cons elt out))))))
+      (define (consume-blank-lines-then-finish kdone)
+        (let lp ()
+          (match (next)
+            ((? eof-object?) (finish kdone))
+            (#\return (lp))
+            (#\newline
+             (consume-indent indent lp (lambda () (finish kdone))))
+            (ch
+             (unget1 ch)
+             (finish kdone)))))
       (match (next)
         ((? eof-object?) (finish on-block-end))
         (#\return (lp elts))
@@ -385,7 +396,7 @@
           indent
           (lambda ()
             (cond
-             ((done? #\newline) => finish)
+             ((done? #\newline) => consume-blank-lines-then-finish)
              (else (lp (cons #\newline elts)))))
           (lambda ()
             (finish on-block-end))))
@@ -421,7 +432,7 @@
     (define (done? ch)
       (match ch
         (#\newline
-         (let ((ch (next)))
+         (let lp ((ch (next)))
            (match ch
              ((? eof-object?)
               (lambda (para)
@@ -429,9 +440,13 @@
              (ch
               (read-block-type ch #t
                                make-continuation
-                               (lambda (chars)
-                                 (unget chars)
-                                 #f))))))
+                               (if (eqv? ch #\newline)
+                                   (lambda (chars)
+                                     (unget chars)
+                                     (make-continuation read-para))
+                                   (lambda (chars)
+                                     (unget chars)
+                                     #f)))))))
         (_ #f)))
     (read-text 'para indent done? (make-continuation read-block-list)))
 
