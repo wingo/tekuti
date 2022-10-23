@@ -682,5 +682,5 @@
                          (else 'h6))))
          `(,tag . ,(map transform-inline body))))))
   (match exp
-    (('top exp ...)
+    (('begin exp ...)
      `(div . ,(map transform-block exp)))))
