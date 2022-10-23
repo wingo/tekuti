@@ -420,7 +420,6 @@
                              (knext (cons para nodelist))))))
     (define (done? ch)
       (match ch
-        (#\return (done? (next)))
         (#\newline
          (let ((ch (next)))
            (match ch
@@ -440,8 +439,14 @@
     (unget chars)
     (read-para indent kup knext))
 
-  (define (read-heading level knext)
-    (error "unimplemented"))
+  (define (read-heading level indent continue)
+    (let ((continue (lambda (heading)
+                      (match heading
+                        (('heading . body)
+                         (continue `(heading ,level . ,body)))))))
+      (read-text 'heading indent (lambda (ch)
+                                   (and (eqv? ch #\newline) continue))
+                 continue)))
 
   (define (read-li marker marker-indent marker-size kup knext)
     (read-indent
@@ -485,7 +490,7 @@
            (#\space
             (kblock
              (lambda (indent kup knext)
-               (read-heading level (make-continue indent kup knext)))))
+               (read-heading level indent (make-continue indent kup knext)))))
            (#\return (lp level))
            (#\newline
             (kblock
