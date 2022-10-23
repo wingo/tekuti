@@ -449,6 +449,11 @@
                  continue)))
 
   (define (read-li marker marker-indent marker-size kup knext)
+    (define list-tag
+      (match marker
+        ((? number?) 'enumerate)
+        ((? char?) 'itemize)))
+    (define (list-tag? tag) (eq? tag list-tag))
     (read-indent
      (lambda (ch indent)
        (match indent
@@ -459,21 +464,19 @@
                     (append marker-outer
                             (list (+ marker-inner marker-size outer))
                             inner)))
-               (read-indented-block
-                ch marker-indent body-indent
-                (lambda (elt ch indent)
-                  (read-indented-block ch marker-indent indent kup
-                                       (lambda (nodelist)
-                                         (knext (cons elt nodelist)))))
-                (lambda (nodelist)
-                  (cons* 'li marker nodelist)))))))))))
-
-  (define (read-block ch indent kup knext)
-    (define (have-block read-block)
-      (read-block indent kup knext))
-    (define (have-text chars)
-      (read-para* chars indent kup knext))
-    (read-block-type ch #f have-block have-text))
+               (read-block
+                ch body-indent
+                (lambda (blocks ch next-indent)
+                  (read-indented-block
+                   ch marker-indent next-indent kup
+                   (lambda (nodelist)
+                     (knext
+                      (match nodelist
+                        ((((? list-tag?) . items) . nodelist)
+                         `((,list-tag (item . ,blocks) . ,items) . ,nodelist))
+                        (_
+                         `((,list-tag (item . ,blocks)) . ,nodelist)))))))
+                identity)))))))))
 
   (define (read-block-type ch in-text? kblock ktext)
     (define (make-continue indent kup knext)
@@ -576,16 +579,31 @@
       (_
        (ktext (list ch)))))
 
+  (define (read-block ch indent kup knext)
+    (define (have-block read-block)
+      (read-block indent kup knext))
+    (define (have-text chars)
+      (read-para* chars indent kup knext))
+    (read-block-type ch #f have-block have-text))
+
+  (define (finish-block-list blocks)
+    (match blocks
+      ((block) block)
+      (_ `(begin . ,blocks))))
+  (define (finish-block-quote blocks)
+    (match blocks
+      ((block) block)
+      (_ `(blockquote . ,blocks))))
+
   (define (read-indented-block ch outer-indent indent kup knext)
-    (define (recurse kind recurse-indent)
+    (define (recurse finish recurse-indent)
       (read-indented-block ch recurse-indent indent
                            (lambda (nested ch indent)
                              (read-indented-block ch outer-indent indent
                                                   kup
                                                   (lambda (nodelist)
                                                     (knext (cons nested nodelist)))))
-                           (lambda (nodelist)
-                             (cons kind nodelist))))
+                           finish))
     (match (compare-indents outer-indent indent)
       ('same
        (read-block ch indent kup knext))
@@ -594,9 +612,10 @@
            'different-blockquote)
        (kup (knext '()) ch indent))
       ('inner
-       (recurse 'begin indent))
+       (recurse finish-block-list indent))
       ('inner-blockquote
-       (recurse 'blockquote (list-head indent (1+ (length outer-indent)))))))
+       (recurse finish-block-quote
+                (list-head indent (1+ (length outer-indent)))))))
 
   (define (parse-error reason)
     (error reason))
@@ -608,7 +627,7 @@
 
   (read-block-list empty-indent
                    (lambda (nodelist ch indent) nodelist)
-                   (lambda (nodelist) (cons 'top nodelist))))
+                   finish-block-list))
 
 (define* (smarxdown->shtml exp #:key
                            (heading-offset 0)
@@ -627,7 +646,14 @@
       (('block-xml xml) (handle-block-xml xml))
       (('para . body) `(p . ,(map transform-inline body)))
       (('blockquote . body) `(blockquote . ,(map transform-block body)))
-      (('list-item . body) (error "fixme"))
+      (('itemize ('item . item) ...)
+       `(ul . ,(map (lambda (blocks)
+                      `(li . ,(map transform-block blocks)))
+                    item)))
+      (('enumerate ('item . item) ...)
+       `(ol . ,(map (lambda (blocks)
+                      `(li . ,(map transform-block blocks)))
+                    item)))
       (('pre #f . body) `(pre . ,body))
       (('pre info . body) `(pre (@ (class ,(string-append "pre-" info)))
                                 . ,body))
