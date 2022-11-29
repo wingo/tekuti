@@ -283,13 +283,19 @@
                                                (assq-ref index 'master))))
        (let ((removed-features (count-features removed))
              (added-features (count-features added)))
+         ;; If a comment passes the spam filter, it gets added, and is
+         ;; presumed legitimate.  It could then be reverted, in which
+         ;; case we should remove its features from the legitimate count
+         ;; and add them to the bogus count.
          (hash-for-each (lambda (k v)
                           (remove-feature! legit-features k v)
                           (add-feature! bogus-features k v))
                         removed-features)
          (hash-for-each (lambda (k v)
-                          (add-feature! legit-features k v)
-                          (remove-feature! bogus-features k v))
+                          ;; Asymmetry with removed-features; the
+                          ;; comment wasn't previously marked bogus, so
+                          ;; we just add its features to the legit set.
+                          (add-feature! legit-features k v))
                         added-features)
          (update-bogosities! bogosities removed-features
                              legit-features bogus-features)
