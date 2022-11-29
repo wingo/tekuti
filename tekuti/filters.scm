@@ -94,6 +94,9 @@
 (define (marxdown->sxml text)
   (smarxdown->shtml (call-with-input-string text marxdown->smarxdown)))
 
+(define (pre-class? class)
+  (string-prefix? "pre-" class))
+
 (define *allowed-tags*
   `((a (href . ,urlish?) title)
     (abbr title)
@@ -105,9 +108,10 @@
     (em)
     (i)
     (p)
-    (pre)
+    (pre (class . ,pre-class?))
     (strike)
-    (strong)))
+    (strong)
+    (tt)))
 
 (define (compile-sxslt-rules tags)
   (define (ok . body)
