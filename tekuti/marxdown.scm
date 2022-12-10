@@ -132,13 +132,28 @@
        (unget chars))))
 
   (define (next) (get-char port))
+  (define (peek) (peek-char port))
+
   (define (next-not-eof ctx)
     (let ((ch (next)))
       (if (eof-object? ch)
           (error "EOF while reading" ctx)
           ch)))
-  (define (next-line-and-delim) (read-line port 'split))
-  (define (peek) (peek-char port))
+  (define (next-line-and-delim)
+    (let lp ((chars '()))
+      (define (finish delim)
+        (cons (reverse-list->string chars) delim))
+      (let ((ch (next)))
+        (cond
+         ((eof-object? ch) (finish ch))
+         ((eqv? ch #\return)
+          (if (eqv? (peek) #\newline)
+              (finish (next))
+              (lp (cons ch chars))))
+         ((eqv? ch #\newline)
+          (finish ch))
+         (else
+          (lp (cons ch chars)))))))
 
   (define (skip-whitespace k)
     (let lp ((indent 0))
