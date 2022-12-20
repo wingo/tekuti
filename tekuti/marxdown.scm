@@ -203,6 +203,8 @@
        (match (vector prev new)
          (#(() ()) 'same)
          (#((prev) (new)) (if (< prev new) 'inner 'outer))
+         (#((prev . _) (new . _))
+          (if (< prev new) 'inner-blockquote 'different-blockquote))
          (#(() _) 'inner-blockquote)
          (#(_ ()) 'outer-blockquote)
          (_ 'different-blockquote)))))
