@@ -214,25 +214,27 @@
 
   (define (drop-whitespace-up-to n col kt kf)
     (define col-end (+ col n))
-    (let lp ((n n))
+    (let lp ((n n) (chars '()))
       (cond
        ((zero? n) (kt))
        (else
         (match (next)
-          (#\space (lp (1- n)))
+          (#\space (lp (1- n) (cons #\space chars)))
           (#\tab
            (let ((col (advance/tab (- col-end n))))
              (cond
-              ((<= col col-end) (lp (- col-end col)))
+              ((<= col col-end)
+               (lp (- col-end col) (cons #\tab chars)))
               (else (kt)))))
           (#\newline
            ;; Sure.  Trailing whitespace can be any indent.
            (unget1 #\newline)
            (kt))
           (#\return
-           (lp n))
+           (lp n (cons #\return chars)))
           (ch
            (unless (eof-object? ch) (unget1 ch))
+           (unget chars)
            (kf)))))))
 
   (define (drop-whitespace-then-blockquote n col kt kf)
