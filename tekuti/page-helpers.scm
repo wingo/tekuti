@@ -430,7 +430,7 @@ present."
                                         ;(p (small "allowed tags: "))
      (p (textarea (@ (name "comment") (id "comment") (cols "65") (rows "10"))
                   ,comment))
-     (p (input (@ (name "submit") (type "submit") (id "submit") (tabindex "5")
+     (p (input (@ (name "submit") (type "submit") (id "submit")
                   (value "Submit Comment")))))))
 
 (define (comments-sxml-content-edit post)
