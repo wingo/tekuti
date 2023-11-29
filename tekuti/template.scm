@@ -57,7 +57,7 @@
           (meta (@ (name "generator")
                    (content "tekuti: https://wingolog.org/software/tekuti")))
           (meta (@ (name "description")
-                   (content ,(format #f "~a: ~a" title subtitle))))
+                   (content ,(format #f "~a: ~a" *title* subtitle))))
           (meta (@ (name "keywords")
                    (content ,(string-join keywords ", "))))
           (meta (@ (name "viewport") (content "width=device-width")))
@@ -73,8 +73,8 @@
      (div (@ (id "rap"))
           (header
            (h1 (@ (id "header"))
-               (a (@ ,(href "")) ,*title*)))
-          ,@(make-navbar)
+               (a (@ ,(href "")) ,*title*))
+           ,@(make-navbar))
           (main
            (@ (id "content"))
            ,@body)
