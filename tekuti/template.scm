@@ -32,8 +32,9 @@
 
 (define* (templatize #:key
                      (title *title*)
+                     (subtitle *subtitle*)
                      (body '((p "(missing content?)")))
-                     description)
+                     (keywords '()))
   (define (href . args)
     `(href ,(string-append "/" (encode-and-join-uri-path
                                 (append *public-path-base* args)))))
@@ -55,10 +56,10 @@
     (head (title ,title)
           (meta (@ (name "generator")
                    (content "tekuti: https://wingolog.org/software/tekuti")))
-          ,@(if description
-                `((meta (@ (name "description")
-                           (content ,(or description *subtitle*)))))
-                '())
+          (meta (@ (name "description")
+                   (content ,(format #f "~a: ~a" title subtitle))))
+          (meta (@ (name "keywords")
+                   (content ,(string-join keywords ", "))))
           (meta (@ (name "viewport") (content "width=device-width")))
           (link (@ (rel "stylesheet")
                    (type "text/css")

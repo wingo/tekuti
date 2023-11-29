@@ -43,7 +43,6 @@
   #:use-module (srfi srfi-19)
   #:export (respond
             relurl rellink
-            meta-description
             post-url
             post-editing-form
             sidebar-ul top-tags tag-cloud
@@ -241,7 +240,8 @@ present."
                   redirect
                   (status (if redirect 302 200))
                   (title *title*)
-                  (description #f)
+                  (subtitle *subtitle*)
+                  (keywords '())
                   last-modified
                   etag
                   (doctype html-doctype)
@@ -253,8 +253,10 @@ present."
                      ('text/html shtml->html)
                      ('application/atom+xml sxml->xml)))
                   (sxml (and body
-                             (templatize #:title title #:body body
-                                         #:description description))))
+                             (templatize #:title title
+                                         #:subtitle subtitle
+                                         #:keywords keywords
+                                         #:body body))))
   (values (build-response
            #:code status
            #:headers (build-headers
@@ -318,16 +320,6 @@ present."
 (define* (rellink path-components text #:key query fragment)
   (relative-path-link *public-path-base* path-components text #:query query
                       #:fragment fragment))
-
-(define* (meta-description #:key (what "Web site") (name *name*)
-                           (title *title*)
-                           (about "about") (keywords '()))
-  (format #f "~A:~A by ~A~A." title what name
-          (match keywords
-            (() "")
-            ((kw0) (format #f "~A ~A" about kw0))
-            ((kw0 kw1) (format #f "~A ~A and ~A" about kw0 kw1))
-            ((kw ... kw1) (format #f "~A ~{~A, ~}and ~A" about kw kw1)))))
 
 (define (post-editing-form post)
   `(section

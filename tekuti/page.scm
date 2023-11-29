@@ -191,21 +191,25 @@
              . ,(map (lambda (post) (show-post post #f))
                      (latest-posts index #:limit 10)))
            #:etag (assq-ref index 'master)
-           #:description (meta-description #:what "Web site"
-                                           #:keywords (top-tags index 10))))
+           #:title *title*
+           #:subtitle *subtitle*
+           #:keywords (map car (top-tags index 10))))
 
 (define (page-show-post request body index year month day post)
   (cond
    ((post-from-key index (make-post-key year month day post)
                    #:allow-draft? #t)
     => (lambda (post)
+         (define title
+           (format #f "~a — ~a" (post-title post) *title*))
+         (define subtitle
+           (format #f "article: ~a" (post-title post)))
          (respond `(,(post-sidebar post index)
                     ,(show-post post #t))
-                  #:title (string-append (post-title post) " — " *title*)
+                  #:title title
                   #:etag (assq-ref index 'master)
-                  #:description
-                  (meta-description #:what "Article"
-                                    #:keywords (post-tags post)))))
+                  #:subtitle subtitle
+                  #:keywords (post-tags post))))
    (else
     (page-not-found request body index))))
 
@@ -262,13 +266,12 @@
             (lambda (post) #t)))
       (define (make-date-header post)
         (lambda (x) #f))
-      (define description
+      (define subtitle
         (cond
-         (day (format #f "Articles by ~A written in ~A/~A/~A."
-                      *name* year month day))
-         (month (format #f "Articles by ~A written in ~A/~A." *name* year month))
-         (year (format #f "Articles by ~A written in ~A." *name* year))
-         (else (format #f "All articles written by ~A." *name*))))
+         (day (format #f "articles written in ~A/~A/~A." year month day))
+         (month (format #f "articles written in ~A/~A." year month))
+         (year (format #f "articles written in ~A." year))
+         (else (format #f "all articles."))))
 
       (let lp ((posts (latest-posts index #:limit -1)))
         (cond ((or (null? posts) (too-early? (car posts)))
@@ -283,7 +286,7 @@
                    (respond (reverse out)
                             #:title (string-append "archives: " *title*)
                             #:etag (assq-ref index 'master)
-                            #:description description))
+                            #:subtitle subtitle))
                   ((new-header (car posts))
                    => (lambda (sxml)
                         (lp (cdr posts) (make-date-header (car posts))
@@ -295,8 +298,8 @@
 (define (page-search request body index)
   (let* ((string (or (assoc-ref (request-form-data request body) "string") ""))
          (posts (find-posts-matching string index)))
-    (define description
-      (format #f "Articles by ~A containing the string ~S." *name* string))
+    (define subtitle
+      (format #f "articles containing the string ~S." string))
     (respond `((h2 "search results: \"" ,string "\"")
                ,@(if (null? posts)
                      `((p "No posts matched your search string."))
@@ -304,17 +307,17 @@
                             `(p ,(post-link post)))
                           posts)))
              #:status (if (null? posts) 404 200)
-             #:description description)))
+             #:subtitle subtitle)))
 
 (define (page-show-tags request body index)
-  (define description
-    "A clickable tag cloud of all tags used in published articles.")
+  (define subtitle
+    "a clickable tag cloud of all tags used in published articles.")
   (respond `((div (@ (id "tag-cloud"))
                   (h2 "all tags")
                   ,@(tag-cloud (top-tags index 200))))
            #:etag (assq-ref index 'master)
            #:title (string-append "all tags — " *title*)
-           #:description description))
+           #:subtitle subtitle))
 
 (define (page-show-tag request body index tag)
   (let* ((tags (assq-ref index 'tags))
@@ -327,9 +330,8 @@
                    (p "No posts were found tagged as \"" ,tag "\"."))
                  #:status 404))
       (_
-       (define description
-         (meta-description #:what "Articles" #:keywords (list tag)))
-       ;; Could add related tags.
+       (define subtitle
+         (format #f "articles with the tag ~S." tag))
        (respond `((h2 "posts tagged \"" ,tag "\" ("
                       ,(rellink '("feed" "atom") "feed"
                                 #:query `(("with" . ,tag)))
@@ -339,7 +341,9 @@
                   ,(related-tag-cloud tag index))
                 #:etag (assq-ref index 'master)
                 #:title (string-append "posts tagged \"" tag "\"")
-                #:description description)))))
+                #:subtitle subtitle
+                ;; Could add related tags.
+                #:keywords (list tag))))))
 
 (define (page-debug request body index)
   (respond `((p "hello world!")
