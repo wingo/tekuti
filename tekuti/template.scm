@@ -1,5 +1,5 @@
 ;; Tekuti
-;; Copyright (C) 2008, 2010, 2012 Andy Wingo <wingo at pobox dot com>
+;; Copyright (C) 2008, 2010, 2012, 2023 Andy Wingo <wingo at pobox dot com>
 
 ;; This program is free software; you can redistribute it and/or
 ;; modify it under the terms of the GNU General Public License as
@@ -32,7 +32,8 @@
 
 (define* (templatize #:key
                      (title *title*)
-                     (body '((p "(missing content?)"))))
+                     (body '((p "(missing content?)")))
+                     description)
   (define (href . args)
     `(href ,(string-append "/" (encode-and-join-uri-path
                                 (append *public-path-base* args)))))
@@ -45,15 +46,19 @@
   (define (make-navbar)
     (if (null? *navbar-links*)
         '()
-        `((div (@ (id "navbar"))
+        `((nav (@ (id "navbar"))
                ,@(list-join
                   (map (lambda (x) `(a (@ (href ,(cdr x))) ,(car x)))
                        *navbar-links*)
                   *navbar-infix*)))))
   `(html
     (head (title ,title)
-          (meta (@ (name "Generator")
-                   (content "An unholy concoction of parenthetical guile")))
+          (meta (@ (name "generator")
+                   (content "tekuti: https://wingolog.org/software/tekuti")))
+          ,@(if description
+                `((meta (@ (name "description")
+                           (content ,(or description *subtitle*)))))
+                '())
           (meta (@ (name "viewport") (content "width=device-width")))
           (link (@ (rel "stylesheet")
                    (type "text/css")
@@ -65,11 +70,15 @@
                    (href ,(relurl `("feed" "atom"))))))
     (body
      (div (@ (id "rap"))
-          (h1 (@ (id "header"))
-              (a (@ ,(href "")) ,*title*))
+          (header
+           (h1 (@ (id "header"))
+               (a (@ ,(href "")) ,*title*)))
           ,@(make-navbar)
-          (div (@ (id "content")) ,@body)
-          (div (@ (id "footer"))
-               "powered by "
-               (a (@ (href "//wingolog.org/software/tekuti/"))
-                  "tekuti"))))))
+          (main
+           (@ (id "content"))
+           ,@body)
+          (footer
+           (@ (id "footer"))
+           "powered by "
+           (a (@ (href "//wingolog.org/software/tekuti/"))
+              "tekuti"))))))

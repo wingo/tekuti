@@ -1,5 +1,5 @@
 ;; Tekuti
-;; Copyright (C) 2008, 2010, 2012, 2014, 2019, 2021 Andy Wingo <wingo at pobox dot com>
+;; Copyright (C) 2008, 2010, 2012, 2014, 2019, 2021, 2023 Andy Wingo <wingo at pobox dot com>
 
 ;; This program is free software; you can redistribute it and/or
 ;; modify it under the terms of the GNU General Public License as
@@ -25,6 +25,7 @@
 ;;; Code:
 
 (define-module (tekuti page-helpers)
+  #:use-module (ice-9 format)
   #:use-module (ice-9 match)
   #:use-module (sxml simple)
   #:use-module (web uri)
@@ -42,6 +43,7 @@
   #:use-module (srfi srfi-19)
   #:export (respond
             relurl rellink
+            meta-description
             post-url
             post-editing-form
             sidebar-ul top-tags tag-cloud
@@ -239,6 +241,7 @@ present."
                   redirect
                   (status (if redirect 302 200))
                   (title *title*)
+                  (description #f)
                   last-modified
                   etag
                   (doctype html-doctype)
@@ -249,7 +252,9 @@ present."
                    (match content-type
                      ('text/html shtml->html)
                      ('application/atom+xml sxml->xml)))
-                  (sxml (and body (templatize #:title title #:body body))))
+                  (sxml (and body
+                             (templatize #:title title #:body body
+                                         #:description description))))
   (values (build-response
            #:code status
            #:headers (build-headers
@@ -314,8 +319,18 @@ present."
   (relative-path-link *public-path-base* path-components text #:query query
                       #:fragment fragment))
 
+(define* (meta-description #:key (what "Web site") (name *name*)
+                           (title *title*)
+                           (about "about") (keywords '()))
+  (format #f "~A:~A by ~A~A." title what name
+          (match keywords
+            (() "")
+            ((kw0) (format #f "~A ~A" about kw0))
+            ((kw0 kw1) (format #f "~A ~A and ~A" about kw0 kw1))
+            ((kw ... kw1) (format #f "~A ~{~A, ~}and ~A" about kw kw1)))))
+
 (define (post-editing-form post)
-  `(div
+  `(section
     (form (@ (method "POST")
              (action ,(if post
                           (relurl `("admin" "modify-post" ,(post-key post)))
@@ -378,14 +393,15 @@ present."
                   (p (input (@ (type "submit") (value "delete post")))))
             ,@(let ((l (comments-sxml-content-edit post)))
                 (if (null? l) l
-                    `((h2 "comments")
-                      (ol (@ (class "commentlist")) ,@l))))
+                    `((section
+                       (h2 "comments")
+                       (ol (@ (class "commentlist")) ,@l)))))
             (h2 "preview")
-            ,@(show-post post #f))
+            ,(show-post post #f))
           '())))
 
 (define (sidebar-ul body)
-  `(div (@ (id "menu"))
+  `(nav (@ (id "menu"))
         (ul ,@body)))
 
 (define (admin-post-url post)
@@ -449,39 +465,37 @@ present."
                      ((0) "No responses")
                      ((1) "One response")
                      (else (format #f "~d responses" len)))))))
-    `(div
+    `(section
       ,@(or (and=> (n-comments-header) list) '())
       ,@(let ((l (map comment-sxml-content comments)))
           (if (null? l) l
               `((ol (@ (class "commentlist")) ,@l))))
       ,(if (not comments-open?)
            `(p (@ (id "nocomments")) "Comments are closed.")
-           `(div (h3 "Leave a Reply")
-                 ,(comment-form post "" "" "" ""))))))
+           `(section
+             (h3 "Leave a Reply")
+             ,(comment-form post "" "" "" ""))))))
 
 (define (tag-link tagname)
   (rellink `("tags" ,tagname) tagname))
 
 (define (show-post post comments?)
-  `((h2 (@ (class "storytitle"))
-        ,(post-link post))
-    (div (@ (class "post"))
-         (h3 (@ (class "meta"))
-             ,(post-readable-date post)
-             " (" ,@(list-intersperse
-                     (map tag-link (post-tags post))
-                     " | ")
-             ")")
-         (div (@ (class "storycontent"))
-              ,(post-sxml-content post))
-         ,@(if comments?
-               '()
-               `((div (@ (class "feedback"))
-                      (a (@ (href ,(post-url post #:fragment "comments")))
-                         "(" ,(post-n-comments post) ")")))))
-    ,@(if comments?
-          (list (post-sxml-comments post))
-          '())))
+  `(article
+    (header
+     (h2 (@ (class "storytitle"))
+         ,(post-link post))
+     (h3 (@ (class "meta"))
+         ,(post-readable-date post)
+         " (" ,@(list-intersperse
+                 (map tag-link (post-tags post))
+                 " | ")")"))
+    ,(post-sxml-content post)
+    ,(if comments?
+         (post-sxml-comments post)
+         `(footer
+           (@ (class "feedback"))
+           (a (@ (href ,(post-url post #:fragment "comments")))
+              "(" ,(post-n-comments post) ")")))))
 
 (define (top-tags index n)
   (let ((hash (assq-ref index 'tags)))

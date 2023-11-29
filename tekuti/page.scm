@@ -1,5 +1,5 @@
 ;; Tekuti
-;; Copyright (C) 2008, 2010, 2011, 2012, 2019, 2021 Andy Wingo <wingo at pobox dot com>
+;; Copyright (C) 2008, 2010, 2011, 2012, 2019, 2021, 2023 Andy Wingo <wingo at pobox dot com>
 
 ;; This program is free software; you can redistribute it and/or
 ;; modify it under the terms of the GNU General Public License as
@@ -25,6 +25,7 @@
 ;;; Code:
 
 (define-module (tekuti page)
+  #:use-module (ice-9 match)
   #:use-module (tekuti config)
   #:use-module (tekuti util)
   #:use-module (tekuti git)
@@ -187,10 +188,11 @@
 
 (define (page-index request body index)
   (respond `(,(main-sidebar request index)
-             . ,(append-map (lambda (post)
-                              (show-post post #f))
-                            (latest-posts index #:limit 10)))
-           #:etag (assq-ref index 'master)))
+             . ,(map (lambda (post) (show-post post #f))
+                     (latest-posts index #:limit 10)))
+           #:etag (assq-ref index 'master)
+           #:description (meta-description #:what "Web site"
+                                           #:keywords (top-tags index 10))))
 
 (define (page-show-post request body index year month day post)
   (cond
@@ -198,9 +200,12 @@
                    #:allow-draft? #t)
     => (lambda (post)
          (respond `(,(post-sidebar post index)
-                    ,@(show-post post #t))
-                  #:title (string-append (post-title post) " -- " *title*)
-                  #:etag (assq-ref index 'master))))
+                    ,(show-post post #t))
+                  #:title (string-append (post-title post) " — " *title*)
+                  #:etag (assq-ref index 'master)
+                  #:description
+                  (meta-description #:what "Article"
+                                    #:keywords (post-tags post)))))
    (else
     (page-not-found request body index))))
 
@@ -257,19 +262,28 @@
             (lambda (post) #t)))
       (define (make-date-header post)
         (lambda (x) #f))
+      (define description
+        (cond
+         (day (format #f "Articles by ~A written in ~A/~A/~A."
+                      *name* year month day))
+         (month (format #f "Articles by ~A written in ~A/~A." *name* year month))
+         (year (format #f "Articles by ~A written in ~A." *name* year))
+         (else (format #f "All articles written by ~A." *name*))))
 
       (let lp ((posts (latest-posts index #:limit -1)))
         (cond ((or (null? posts) (too-early? (car posts)))
                (respond `((h1 "No posts found")
                           (p "No posts were found in the specified period."))
+                        #:status 404
                         #:title *title*))
               ((early-enough? (car posts))
                (let lp ((posts posts) (new-header (make-date-header #t)) (out '()))
                  (cond
                   ((or (null? posts) (too-early? (car posts)))
                    (respond (reverse out)
-                            #:title (string-append "archives -- " *title*)
-                            #:etag (assq-ref index 'master)))
+                            #:title (string-append "archives: " *title*)
+                            #:etag (assq-ref index 'master)
+                            #:description description))
                   ((new-header (car posts))
                    => (lambda (sxml)
                         (lp (cdr posts) (make-date-header (car posts))
@@ -281,38 +295,51 @@
 (define (page-search request body index)
   (let* ((string (or (assoc-ref (request-form-data request body) "string") ""))
          (posts (find-posts-matching string index)))
+    (define description
+      (format #f "Articles by ~A containing the string ~S." *name* string))
     (respond `((h2 "search results: \"" ,string "\"")
                ,@(if (null? posts)
                      `((p "No posts matched your search string."))
                      (map (lambda (post)
                             `(p ,(post-link post)))
-                          posts))))))
+                          posts)))
+             #:status (if (null? posts) 404 200)
+             #:description description)))
 
 (define (page-show-tags request body index)
+  (define description
+    "A clickable tag cloud of all tags used in published articles.")
   (respond `((div (@ (id "tag-cloud"))
                   (h2 "all tags")
                   ,@(tag-cloud (top-tags index 200))))
            #:etag (assq-ref index 'master)
-           #:title (string-append "all tags -- " *title*)))
+           #:title (string-append "all tags — " *title*)
+           #:description description))
 
 (define (page-show-tag request body index tag)
   (let* ((tags (assq-ref index 'tags))
          (posts (map (lambda (key)
                        (post-from-key index key))
                      (hash-ref tags tag '()))))
-    (if (pair? posts)
-        (respond `((h2 "posts tagged \"" ,tag "\" ("
-                       ,(rellink '("feed" "atom") "feed"
-                                 #:query `(("with" . ,tag)))
-                       ")")
-                   ,@(map (lambda (post) `(p ,(post-link post)))
-                          posts)
-                   ,(related-tag-cloud tag index))
-                 #:etag (assq-ref index 'master)
-                 #:title (string-append "posts tagged \"" tag "\""))
-        (respond `((h2 "Unknown tag " ,tag)
+    (match posts
+      (()
+       (respond `((h2 "Unknown tag " ,tag)
                    (p "No posts were found tagged as \"" ,tag "\"."))
-                 #:status 404))))
+                 #:status 404))
+      (_
+       (define description
+         (meta-description #:what "Articles" #:keywords (list tag)))
+       ;; Could add related tags.
+       (respond `((h2 "posts tagged \"" ,tag "\" ("
+                      ,(rellink '("feed" "atom") "feed"
+                                #:query `(("with" . ,tag)))
+                      ")")
+                  ,@(map (lambda (post) `(p ,(post-link post)))
+                         posts)
+                  ,(related-tag-cloud tag index))
+                #:etag (assq-ref index 'master)
+                #:title (string-append "posts tagged \"" tag "\"")
+                #:description description)))))
 
 (define (page-debug request body index)
   (respond `((p "hello world!")
