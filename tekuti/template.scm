@@ -53,6 +53,7 @@
                        *navbar-links*)
                   *navbar-infix*)))))
   `(html
+    (@ (lang "en"))
     (head (title ,title)
           (meta (@ (name "generator")
                    (content "tekuti: https://wingolog.org/software/tekuti")))
