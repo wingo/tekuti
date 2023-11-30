@@ -73,8 +73,8 @@
     (body
      (div (@ (id "rap"))
           (header
-           (h1 (@ (id "header"))
-               (a (@ ,(href "")) ,*title*))
+           (@ (id "header"))
+           (h1 (a (@ ,(href "")) ,*title*))
            ,@(make-navbar))
           (main
            (@ (id "content"))
