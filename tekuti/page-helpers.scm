@@ -525,8 +525,8 @@ present."
                     (alt "[feed]"))))
         `(form (@ (method "POST")
                   (action ,(relurl '("search"))))
-               (label "search"
-                      (input (@ (name "string") (type "text") (size "15")
+               (label "search "
+                      (input (@ (name "string") (type "text") (size "10")
                                 (value "")))))
         (rellink '("tags") "tags")
         `(div (@ (id "tag-cloud"))
