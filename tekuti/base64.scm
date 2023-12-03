@@ -1,5 +1,5 @@
 ;; Tekuti
-;; Copyright (C) 2008, 2010, 2012 Andy Wingo <wingo at pobox dot com>
+;; Copyright (C) 2008, 2010, 2012, 2023 Andy Wingo <wingo at pobox dot com>
 ;; Copyright (C) 2009 Andreas Rottmann <a dot rottmann at gmx dot at>
 
 ;; This program is free software; you can redistribute it and/or
@@ -31,7 +31,7 @@
 
 (define b64-bytes
   (string->utf8
-   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwzyz0123456789+/"))
+   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"))
 
 (define (int->b64-byte i)
   (bytevector-u8-ref b64-bytes (logand i 63)))
