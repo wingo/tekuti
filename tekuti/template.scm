@@ -34,24 +34,11 @@
                      (title *title*)
                      (subtitle *subtitle*)
                      (body '((p "(missing content?)")))
-                     (keywords '()))
+                     (keywords '())
+                     (nav-items '()))
   (define (href . args)
     `(href ,(string-append "/" (encode-and-join-uri-path
                                 (append *public-path-base* args)))))
-  (define (list-join l infix)
-    "Infixes @var{infix} into list @var{l}."
-    (if (null? l) l
-        (let lp ((in (cdr l)) (out (list (car l))))
-          (cond ((null? in) (reverse out))
-                (else (lp (cdr in) (cons* (car in) infix out)))))))
-  (define (make-navbar)
-    (if (null? *navbar-links*)
-        '()
-        `((nav (@ (id "navbar"))
-               ,@(list-join
-                  (map (lambda (x) `(a (@ (href ,(cdr x))) ,(car x)))
-                       *navbar-links*)
-                  *navbar-infix*)))))
   `(html
     (@ (lang "en"))
     (head (title ,title)
@@ -72,16 +59,18 @@
                    (title ,*title*)
                    (href ,(relurl `("feed" "atom"))))))
     (body
-     (div (@ (id "rap"))
-          (header
-           (@ (id "header"))
-           (h1 (a (@ ,(href "")) ,*title*))
-           ,@(make-navbar))
-          (main
-           (@ (id "content"))
+     (header (@ (id "header"))
+             (h1 (a (@ ,(href "")) ,*title*)))
+     (nav (@ (id "navbar"))
+          (ul ,@(map (lambda (x) `(li ,x))
+                     (append (map (lambda (x)
+                                    `(a (@ (href ,(cdr x))) ,(car x)))
+                                  *navbar-links*)
+                             nav-items))))
+     (main (@ (id "content"))
            ,@body)
-          (footer
-           (@ (id "footer"))
-           "powered by "
-           (a (@ (href "//wingolog.org/software/tekuti/"))
-              "tekuti"))))))
+     (footer
+      (@ (id "footer"))
+      "powered by "
+      (a (@ (href "//wingolog.org/software/tekuti/"))
+         "tekuti")))))

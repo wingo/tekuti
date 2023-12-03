@@ -46,7 +46,7 @@
             post-url
             post-editing-form
             sidebar-ul top-tags tag-cloud
-            main-sidebar post-sidebar related-tag-cloud
+            main-nav-items related-posts-section related-tag-cloud
             post-link admin-post-url admin-post-link
             show-post with-authentication
             find-posts-matching
@@ -242,6 +242,7 @@ present."
                   (title *title*)
                   (subtitle *subtitle*)
                   (keywords '())
+                  (nav-items '())
                   last-modified
                   etag
                   (doctype html-doctype)
@@ -256,6 +257,7 @@ present."
                              (templatize #:title title
                                          #:subtitle subtitle
                                          #:keywords keywords
+                                         #:nav-items nav-items
                                          #:body body))))
   (values (build-response
            #:code status
@@ -321,7 +323,7 @@ present."
   (relative-path-link *public-path-base* path-components text #:query query
                       #:fragment fragment))
 
-(define (post-editing-form post)
+(define (post-editing-form post index)
   `(section
     (form (@ (method "POST")
              (action ,(if post
@@ -389,7 +391,7 @@ present."
                        (h2 "comments")
                        (ol (@ (class "commentlist")) ,@l)))))
             (h2 "preview")
-            ,(show-post post #f))
+            ,(show-post post index #f))
           '())))
 
 (define (sidebar-ul body)
@@ -468,18 +470,20 @@ present."
 (define (tag-link tagname)
   (rellink `("tags" ,tagname) tagname))
 
-(define (show-post post comments?)
+(define (show-post post index standalone?)
   `(article
-    (header
-     (h2 (@ (class "storytitle"))
-         ,(post-link post))
-     (h3 (@ (class "meta"))
-         ,(post-readable-date post)
-         " (" ,@(list-intersperse
-                 (map tag-link (post-tags post))
-                 " | ")")"))
+    (h2 (@ (class "storytitle")) ,(post-link post))
+    (aside (@ (class "meta"))
+           (div (@ (class "post-date"))
+                ,(post-readable-date post))
+           (ul (@ (class "post-tags"))
+               ,@(map (lambda (tag) `(li ,(tag-link tag)))
+                      (post-tags post))))
     ,(post-sxml-content post)
-    ,(if comments?
+    ,@(if standalone?
+          (list (related-posts-section post index))
+          '())
+    ,(if standalone?
          (post-sxml-comments post)
          `(footer
            (@ (class "feedback"))
@@ -514,34 +518,30 @@ present."
         (determine-sizes (map cdr tags)))
    " "))
 
-(define (main-sidebar request index)
-  (sidebar-ul
-   `((li (h2 (a (@ (href ,(relurl '("feed" "atom"))))
-                "subscribe "
-                (img (@ (src ,(relurl '("wp-content" "feed-icon-14x14.png")))
-                        (alt "[feed]")))
-                )))
-     (li (h2 "search")
-         (form (@ (method "POST")
+(define (main-nav-items request index)
+  (list `(a (@ (href ,(relurl '("feed" "atom"))))
+            "subscribe "
+            (img (@ (src ,(relurl '("wp-content" "feed-icon-14x14.png")))
+                    (alt "[feed]"))))
+        `(form (@ (method "POST")
                   (action ,(relurl '("search"))))
-               (input (@ (name "string") (type "text") (size "15")
-                         (value "")))))
-     (li (h2 "tags " ,(rellink '("tags") ">>"))
-         (ul (li (@ (style "line-height: 150%"))
-                 ,@(tag-cloud (top-tags index 30))))))))
+               (label "search"
+                      (input (@ (name "string") (type "text") (size "15")
+                                (value "")))))
+        (rellink '("tags") "tags")
+        `(div (@ (id "tag-cloud"))
+              ,@(tag-cloud (top-tags index 30)))))
 
-(define (post-sidebar post index)
-  (sidebar-ul
-   `((li (h2 (a (@ (href ,(relurl '("feed" "atom"))))
-                "subscribe "
-                (img (@ (src ,(relurl '("wp-content" "feed-icon-14x14.png")))
-                        (alt "[feed]")))
-                )))
-     (li (h2 "related")
-         (ul ,@(map (lambda (post-and-tags)
-                      `(li (@ (style "margin-top: 5px"))
-                           ,(post-link (car post-and-tags))))
-                    (take-max (compute-related-posts post index) 10)))))))
+(define (related-posts-section post index)
+  `(section (@ (class "related-posts"))
+            ,@(match (take-max (compute-related-posts post index) 6)
+                (() '())
+                (posts
+                 `((h2 "related articles")
+                   (ul ,@(map (lambda (post-and-tags)
+                                `(li (@ (style "margin-top: 5px"))
+                                     ,(post-link (car post-and-tags))))
+                              posts)))))))
 
 (define (related-tag-cloud tag index)
   `(div (@ (id "tag-cloud"))
