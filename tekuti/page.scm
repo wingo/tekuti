@@ -212,7 +212,7 @@
            (format #f "~a — ~a" (post-title post) *title*))
          (define subtitle
            (format #f "article: ~a" (post-title post)))
-         (respond (show-post post index #t)
+         (respond (list (show-post post index #t))
                   #:title title
                   #:etag (assq-ref index 'master)
                   #:subtitle subtitle
