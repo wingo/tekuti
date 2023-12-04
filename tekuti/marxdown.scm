@@ -382,8 +382,8 @@
         (ch (lp (cons ch chars))))))
 
   (define (read-text tag indent done? on-block-end)
-    (let lp ((quotes '()) (elts '()))
-      (define (continue elt) (lp quotes (cons elt elts)))
+    (let lp ((quotes '()) (apostrophe? #f) (elts '()))
+      (define (continue elt) (lp quotes apostrophe? (cons elt elts)))
       (define (finish kdone)
         (let lp ((elts elts) (out '()))
           (match elts
@@ -409,14 +409,14 @@
              (finish kdone)))))
       (match (next)
         ((? eof-object?) (finish on-block-end))
-        (#\return (lp quotes elts))
+        (#\return (lp quotes #f elts))
         (#\newline
          (consume-indent
           indent
           (lambda ()
             (cond
              ((done? #\newline) => consume-blank-lines-then-finish)
-             (else (lp quotes (cons #\newline elts)))))
+             (else (lp quotes #f (cons #\newline elts)))))
           (lambda ()
             (finish on-block-end))))
         ((= done? (and kdone (not #f))) (finish kdone))
@@ -427,33 +427,35 @@
         (#\<
          (unget1 #\<)
          (match (parse-one-xml-element port)
-           (#f (lp quotes elts))
+           (#f (lp quotes apostrophe? elts))
            (elt (continue `(inline-xml ,elt)))))
         (#\"
          (match quotes
            ((#\" . quotes)
-            (lp quotes (cons #\” elts)))
+            (lp quotes #t (cons #\” elts)))
            (_
-            (lp (cons #\" quotes) (cons #\“ elts)))))
+            (lp (cons #\" quotes) #f (cons #\“ elts)))))
         (#\'
          (match quotes
            ((#\' . quotes)
-            (lp quotes (cons #\’ elts)))
+            (lp quotes #f (cons #\’ elts)))
            (_
-            (lp (cons #\' quotes) (cons #\‘ elts)))))
-        (#\\ (lp quotes (cons (next-not-eof "backslash") elts)))
+            (if apostrophe?
+                (lp quotes #t (cons #\’ elts))
+                (lp (cons #\' quotes) #f (cons #\‘ elts))))))
+        (#\\ (lp quotes apostrophe? (cons (next-not-eof "backslash") elts)))
         (#\- (match (next)
                (#\-
                 (match (next)
-                  (#\- (lp quotes (cons #\— elts)))
+                  (#\- (lp quotes #f (cons #\— elts)))
                   (ch
                    (unget1 ch)
-                   (lp quotes (cons #\– elts)))))
+                   (lp quotes #f (cons #\– elts)))))
                (ch
                 (unget1 ch)
-                (lp quotes (cons #\- elts)))))
+                (lp quotes #f (cons #\- elts)))))
         (#\! (match (next)
-               ((? eof-object?) (lp quotes (cons #\! elts)))
+               ((? eof-object?) (lp quotes #f (cons #\! elts)))
                (#\[
                 (read-link indent
                            (lambda (link)
@@ -462,8 +464,8 @@
                                 (continue `(image ,dest . ,alt)))))))
                (ch
                 (unget1 ch)
-                (lp quotes (cons #\! elts)))))
-        (ch (lp quotes (cons ch elts))))))
+                (lp quotes #f (cons #\! elts)))))
+        (ch (lp quotes (not (char-whitespace? ch)) (cons ch elts))))))
 
   (define (read-para indent kup knext)
     (define (make-continuation reader)
