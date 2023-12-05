@@ -1,5 +1,5 @@
 ;; Tekuti
-;; Copyright (C) 2008, 2010, 2012, 2014, 2021 Andy Wingo <wingo at pobox dot com>
+;; Copyright (C) 2008, 2010, 2012, 2014, 2021, 2023 Andy Wingo <wingo at pobox dot com>
 
 ;; This program is free software; you can redistribute it and/or
 ;; modify it under the terms of the GNU General Public License as
@@ -31,7 +31,7 @@
   #:export (*public-scheme* *public-host* *public-port* *public-path-base*
             *private-host* *private-port* *private-path-base*
             *git-dir* *git* *debug* *admin-user* *admin-pass*
-            *css-file* *navbar-links* *navbar-infix*
+            *css-file* *inline-css* *navbar-links* *navbar-infix*
             *title* *subtitle* *name* *comments-open-window*
             *server-impl* *server-impl-args*))
 
@@ -47,6 +47,7 @@
 (define *git-dir* "~/blog.git")
 (define *git* "git")
 (define *css-file* "/base.css")
+(define *inline-css* #f)
 (define *navbar-links* '())
 (define *navbar-infix* " ")
 (define *debug* #t)

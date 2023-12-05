@@ -444,8 +444,7 @@ present."
          (form (@ (method "POST")
                    (action ,(relurl `("admin" "delete-comment"
                                       ,(post-key post) ,id))))
-                (input (@ (type "submit") (name "delete") (value "delete"))))
-         (br))))
+                (input (@ (type "submit") (name "delete") (value "delete")))))))
    (post-comments post)))
 
 (define (post-sxml-comments post)

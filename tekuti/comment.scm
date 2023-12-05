@@ -1,5 +1,5 @@
 ;; Tekuti
-;; Copyright (C) 2008, 2010, 2012, 2022 Andy Wingo <wingo at pobox dot com>
+;; Copyright (C) 2008, 2010, 2012, 2022, 2023 Andy Wingo <wingo at pobox dot com>
 
 ;; This program is free software; you can redistribute it and/or
 ;; modify it under the terms of the GNU General Public License as
@@ -78,16 +78,16 @@
      (*text* . ,(lambda (tag text) text)))))
 
 (define (comment-sxml-content comment)
-  `(li (@ (class "alt") (id ,(assq-ref comment 'key)))
-       (cite ,(let ((url (assq-ref comment 'author_url))
-                    (name (assq-ref comment 'author)))
-                (if (and url (not (string-null? url)))
-                    `(a (@ (href ,url) (rel "external nofollow")) ,name)
-                    name)))
-       " says:" (br)
-       (small (@ (class "commentmetadata"))
-              (a (@ (href ,(string-append "#" (assq-ref comment 'key))))
-                 ,(comment-readable-date comment)))
+  `(li (@ (class "comment") (id ,(assq-ref comment 'key)))
+       (header
+        (cite ,(let ((url (assq-ref comment 'author_url))
+                     (name (assq-ref comment 'author)))
+                 (if (and url (not (string-null? url)))
+                     `(a (@ (href ,url) (rel "external nofollow")) ,name)
+                     name)))
+        " says:"
+        (aside (a (@ (href ,(string-append "#" (assq-ref comment 'key))))
+                  ,(comment-readable-date comment))))
        ,(neutralize-links
          (let ((format (or (assq-ref comment 'format) 'wordpress)))
            ((case format
