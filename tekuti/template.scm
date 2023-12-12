@@ -51,11 +51,8 @@
           (meta (@ (name "viewport")
                    (content "width=device-width, initial-scale=1.0")))
           ,(if *inline-css*
-               `(style (@ (type "text/css") (media "screen"))
-                  ,*inline-css*)
-               `(link (@ (rel "stylesheet")
-                         (type "text/css")
-                         (media "screen")
+               `(style (@ (media "screen")) ,*inline-css*)
+               `(link (@ (rel "stylesheet") (media "screen")
                          (href ,*css-file*))))
           (link (@ (rel "alternate")
                    (type "application/rss+xml")
