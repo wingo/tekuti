@@ -49,7 +49,7 @@
             sidebar-ul top-tags tag-cloud
             main-nav-items related-posts-section related-tag-cloud
             post-link admin-post-url admin-post-link
-            show-post with-authentication
+            show-post show-static-post with-authentication
             find-posts-matching
             atom-header atom-entry))
 
@@ -356,7 +356,7 @@ present."
                     " <- close comments on date (empty == in "
                     ,(floor/ *comments-open-window* (* 24 60 60))
                     " days)"))
-          (div (textarea (@ (name "body") (rows "20") (cols "60"))
+          (div (textarea (@ (name "body") (rows "120") (cols "80"))
                          ,(if post (post-raw-content post) "")))
           (p (label (input (@ (type "radio") (name "status") (value "private")
                               ,@(if (or (not post) (post-private? post))
@@ -372,9 +372,17 @@ present."
                          `(a (@ (href ,(post-url post)))
                              ,(post-url post))
                          "direct link")
-                    ")")
-
-             (br)
+                    ")") (br)
+             (label (input (@ (type "radio") (name "status") (value "static")
+                              ,@(if (and post (post-static? post))
+                                    '((checked "checked"))
+                                    '())))
+                    "static (accessible via "
+                    ,(if (and post (post-static? post))
+                         `(a (@ (href ,(post-url post)))
+                             ,(post-url post))
+                         "static link")
+                    ")") (br)
              (label (input (@ (type "radio") (name "status") (value "publish")
                               ,@(if (and post (post-public? post))
                                     '((checked "checked"))
@@ -406,9 +414,11 @@ present."
   `(a (@ (href ,(admin-post-url post))) ,(post-title post)))
 
 (define* (post-url post #:key fragment)
+  (define path-tail (split-and-decode-uri-path (uri-decode (post-key post))))
   (relative-path *public-path-base*
-                 (cons "archives"
-                       (split-and-decode-uri-path (uri-decode (post-key post))))
+                 (if (post-static? post)
+                     path-tail
+                     (cons "archives" path-tail))
                  #:fragment fragment))
 
 (define* (post-link post #:key fragment)
@@ -489,6 +499,16 @@ present."
            (@ (class "feedback"))
            (a (@ (href ,(post-url post #:fragment "comments")))
               "(" ,(post-n-comments post) ")")))))
+
+(define (show-static-post post index)
+  `(article
+    (h2 (@ (class "storytitle")) ,(post-title post))
+    (aside (@ (class "meta"))
+           (ul (@ (class "post-tags"))
+               ,@(map (lambda (tag) `(li ,(tag-link tag)))
+                      (post-tags post))))
+    ,(post-sxml-content post)
+    ,(related-posts-section post index)))
 
 (define (top-tags index n)
   (let ((hash (assq-ref index 'tags)))

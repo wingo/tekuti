@@ -726,4 +726,5 @@
          `(,tag . ,(map transform-inline body))))))
   (match exp
     (('begin exp ...)
-     `(div . ,(map transform-block exp)))))
+     `(div . ,(map transform-block exp)))
+    (_ `(div ,(transform-block exp)))))

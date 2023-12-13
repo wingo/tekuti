@@ -51,6 +51,7 @@
             page-admin-revert-change
             page-index
             page-show-post
+            page-show-static
             page-new-comment
             page-archives
             page-show-tags
@@ -88,7 +89,7 @@
             (git-rev-list "refs/heads/master" n)))
      (respond `((section
                  (h2 "new post")
-                 (aside (@ (id "meta"))
+                 (aside (@ (class "meta"))
                         (h3 "posts " ,(rellink '("admin" "posts") ">>"))
                         (ul ,@(post-links 5))
                         (h3 "changes" ,(rellink '("admin" "changes") ">>"))
@@ -216,6 +217,22 @@
                   #:title title
                   #:etag (assq-ref index 'master)
                   #:subtitle subtitle
+                  #:keywords (post-tags post)
+                  #:nav-items (main-nav-items request index))))
+   (else
+    (page-not-found request body index))))
+
+(define (page-show-static request body index)
+  (cond
+   ((static-post-from-key index
+                          (apply make-post-key (request-relative-path request)))
+    => (lambda (post)
+         (define title
+           (format #f "~a — ~a" (post-title post) *title*))
+         (respond (list (show-static-post post index))
+                  #:title title
+                  #:etag (assq-ref index 'master)
+                  #:subtitle (post-title post)
                   #:keywords (post-tags post)
                   #:nav-items (main-nav-items request index))))
    (else

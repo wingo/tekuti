@@ -1,5 +1,5 @@
 ;; Tekuti
-;; Copyright (C) 2008, 2010, 2011, 2012, 2022 Andy Wingo <wingo at pobox dot com>
+;; Copyright (C) 2008, 2010, 2011, 2012, 2022, 2023 Andy Wingo <wingo at pobox dot com>
 
 ;; This program is free software; you can redistribute it and/or
 ;; modify it under the terms of the GNU General Public License as
@@ -181,5 +181,9 @@
                     ((bad-attr-value)
                      `(p "XHTML attribute has bad value: " ,(car args)))
                     (else
-                     `(p "Hey not real knows why, and so do you")))))))
+                     `(section
+                       (h4 "Internal error")
+                       (pre ,(with-output-to-string
+                               (lambda () (write (cons key args))))))))))))
+
 

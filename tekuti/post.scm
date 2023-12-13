@@ -1,5 +1,5 @@
 ;; Tekuti
-;; Copyright (C) 2008, 2010, 2011, 2012, 2014, 2021, 2022 Andy Wingo <wingo at pobox dot com>
+;; Copyright (C) 2008, 2010, 2011, 2012, 2014, 2021, 2022, 2023 Andy Wingo <wingo at pobox dot com>
 
 ;; This program is free software; you can redistribute it and/or
 ;; modify it under the terms of the GNU General Public License as
@@ -25,7 +25,9 @@
 ;;; Code:
 
 (define-module (tekuti post)
+  #:use-module (ice-9 match)
   #:use-module (srfi srfi-1)
+  #:use-module (srfi srfi-19)
   #:use-module (web uri)
   #:use-module (tekuti match-bind)
   #:use-module (tekuti util)
@@ -33,12 +35,11 @@
   #:use-module (tekuti config)
   #:use-module (tekuti git)
   #:use-module (tekuti filters)
-  #:use-module (srfi srfi-1)
-  #:use-module (srfi srfi-19)
   #:export (post-from-key
+            static-post-from-key
 
             post-tags post-timestamp post-key
-            post-public? post-draft? post-private?
+            post-public? post-draft? post-private? post-static?
             post-comments-open? post-comments-closed-timestamp
             post-comments
             post-sxml-content post-readable-date post-n-comments
@@ -88,9 +89,17 @@
 
 (define* (post-from-key index key #:key allow-unpublished? allow-draft?)
   (let ((post (hash-ref (assq-ref index 'posts) key)))
-    (if (and post (or (post-public? post)
-                      (and (post-draft? post) allow-draft?)
-                      allow-unpublished?))
+    (if (and post
+             (or (post-public? post)
+                 (and (post-draft? post) allow-draft?)
+                 allow-unpublished?))
+        post
+        #f)))
+
+(define (static-post-from-key index key)
+  (let ((post (hash-ref (assq-ref index 'posts) key)))
+    (pk 'static-post-from-key index key)
+    (if (and post (post-static? post))
         post
         #f)))
 
@@ -106,6 +115,9 @@
 
 (define (post-private? post-alist)
   (equal? (assq-ref post-alist 'status) "private"))
+
+(define (post-static? post-alist)
+  (equal? (assq-ref post-alist 'status) "static"))
 
 (define (post-timestamp post-alist)
   (assq-ref post-alist 'timestamp))
@@ -234,9 +246,11 @@
         (format . marxdown)
         (key . ,(string-downcase
                  (uri-encode
-                  (string-append (date->string (timestamp->date timestamp)
-                                               "~Y/~m/~d/")
-                                 (uri-encode name)))))))))
+                  (if (equal? status "static")
+                      (uri-encode name)
+                      (string-append (date->string (timestamp->date timestamp)
+                                                   "~Y/~m/~d/")
+                                     (uri-encode name))))))))))
 
 (define (make-new-post post-data)
   (munge-post #f (parse-post-data post-data)))
@@ -253,12 +267,12 @@
                      master message #f))
                   5)))
 
-(define* (latest-posts index #:key allow-unpublished? (filter identity)
-                       (limit 10))
+(define* (latest-posts index #:key allow-unpublished?
+                       (filter identity) (limit 10))
   (filter-mapn
    (lambda (key)
      (and=> (post-from-key index key #:allow-unpublished? allow-unpublished?)
-            (lambda (post) (and post (filter post) post))))
+            (lambda (post) (and (filter post) post))))
    (assq-ref index 'posts-by-date)
    limit))
 

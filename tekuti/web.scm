@@ -1,5 +1,5 @@
 ;; Tekuti
-;; Copyright (C) 2008, 2010, 2011, 2012 Andy Wingo <wingo at pobox dot com>
+;; Copyright (C) 2008, 2010, 2011, 2012, 2023 Andy Wingo <wingo at pobox dot com>
 
 ;; This program is free software; you can redistribute it and/or
 ;; modify it under the terms of the GNU General Public License as
@@ -58,7 +58,7 @@
    ((GET tags) page-show-tags)
    ((GET tags tag!) page-show-tag)
    ((GET debug) page-debug)
-   (else page-not-found)))
+   (else page-show-static)))
 
 (define (cache-ref index request)
   (cached-response-and-body (assq-ref index 'cache) request))
