@@ -74,8 +74,10 @@
   #:use-module (ice-9 rdelim)
   #:use-module (sxml ssax)
   #:use-module (sxml transform)
-  #:use-module ((srfi srfi-1) #:select (fold))
+  #:use-module ((sxml simple) #:select (sxml->string))
+  #:use-module ((srfi srfi-1) #:select (fold append-map))
   #:export (marxdown->smarxdown
+            smarxdown->marxdown
             smarxdown->shtml
             shtml->smarxdown))
 
@@ -687,6 +689,89 @@
   (read-block-list empty-indent
                    (lambda (nodelist ch indent) nodelist)
                    finish-block-list))
+
+(define (fill-block strings width prefix)
+  (define (split-words strings)
+    (filter
+     (compose not string-null?)
+     (string-split (string-concatenate strings) char-set:whitespace)))
+  (define (build-lines words width)
+    (define (finish-line line)
+      (string-join (reverse line) " "))
+    (let lp ((words words) (line '()) (col 0))
+      (match words
+        (()
+         (if (null? line)
+             '()
+             (cons (finish-line line) '())))
+        ((word . words*)
+         (let ((col (+ (if (zero? col) col (1+ col))
+                       (string-length word))))
+           (if (or (<= col width) (null? line))
+               (lp words* (cons word line) col)
+               (cons (finish-line line)
+                     (build-lines words width))))))))
+  (string-join
+   (build-lines (split-words strings) width)
+   (string-append "\n" prefix)))
+
+(define* (smarxdown->marxdown exp #:key (width 72))
+  (define (transform-inline exp)
+    (match exp
+      (('inline-xml xml)
+       (list (sxml->string xml)))
+      (('code . body)
+       `("`" ,@body "`"))
+      (('emph . body)
+       `("*" ,@(transform-inline* body) "*"))
+      (('strong . body)
+       `("**" ,@(transform-inline* body) "**"))
+      (('link dest . body)
+       `("[" ,@(transform-inline* body) "](" ,dest ")"))
+      ((? string? str)
+       (list str))))
+  (define (transform-inline* exps)
+    (append-map transform-inline exps))
+  (define (transform-block exp prefix)
+    (match exp
+      (('block-xml xml) (sxml->string xml))
+      (('para . body)
+       (string-append
+        (fill-block (transform-inline* body) width prefix)
+        "\n"))
+      (('blockquote . body)
+       (string-append
+        "> "
+        (fill-block (transform-inline* body) (- width 2)
+                    (string-append prefix "> "))
+        "\n"))
+      (('itemize ('item . item) ...)
+       (string-join
+        (map
+         (lambda (blocks)
+           (string-append " * "
+                          (transform-block `(begin . ,blocks)
+                                           (string-append prefix "   "))))
+         item)))
+      (('enumerate ('item . item) ...)
+       (string-join
+        (map
+         (lambda (blocks)
+           (string-append " 1. "
+                          (transform-block `(begin . ,blocks)
+                                           (string-append prefix "    "))))
+         item)))
+      (('pre #f . body)
+       (string-append "```\n" (string-concatenate body) "```"))
+      (('pre info . body)
+       (string-append "```" info "\n" (string-concatenate body) "```"))
+      (('heading level . body)
+       (string-append (make-string level #\#) " "
+                      (string-concatenate (transform-inline* body))))
+      (('begin block ...)
+       (string-join (map (lambda (block) (transform-block block "")) exp)
+                    (string-append "\n\n" prefix)))))
+  (transform-block exp ""))
 
 (define* (smarxdown->shtml exp #:key
                            (heading-offset 0)
